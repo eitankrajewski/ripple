@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { motion, useMotionValue, useTransform } from "framer-motion";
-import { ArrowRight, Check, ChevronsRight, HandPlatter, LayoutGrid, ShieldAlert } from "lucide-react";
+import { ArrowRight, Check, ChevronsRight, HandPlatter, Layers, LayoutGrid, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import type { OrderView, StationId } from "../../engine/types";
 import { haptic } from "../../lib/haptics";
@@ -14,6 +14,152 @@ const DONE_LABEL: Record<StationId, string> = { prep: "Prep done", cook: "Cooked
 const NEXT: Record<StationId, string> = { prep: "Cook", cook: "Pack", pack: "Ready shelf" };
 
 const startsLater = (o: OrderView) => o.status === "queued" && (o.fireInMinutes ?? 0) >= 0.5;
+const STAGE_NAME: Record<string, string> = { prep: "Prep", cook: "Cook", pack: "Pack", done: "bagged" };
+const OPEN = (o: OrderView) => !["ready", "held", "deferred"].includes(o.status);
+const hasItemsAt = (o: OrderView, st: StationId) => o.items.some((i) => o.itemStage[i.menuItemId] === st);
+const ORDER: (StationId | "done")[] = ["prep", "cook", "pack", "done"];
+const before = (o: OrderView, st: StationId) => o.items.some((i) => ORDER.indexOf(o.itemStage[i.menuItemId] ?? "prep") < ORDER.indexOf(st));
+
+function sendItems(act: ReturnType<typeof useTwin.getState>["act"], o: OrderView, ids: string[], station: StationId) {
+  for (const id of ids) void act({ type: "item_done", orderId: o.id, menuItemId: id, station });
+}
+
+/** Prep/Cook ticket: tick finished components and send just those on, or send everything that's here. */
+function ComponentTicket({ o, station, primary }: { o: OrderView; station: StationId; primary: boolean }) {
+  const act = useTwin((s) => s.act);
+  const menu = useTwin((s) => s.kitchen.config.menu);
+  const [picked, setPicked] = useState<string[]>([]);
+  const here = o.items.filter((i) => o.itemStage[i.menuItemId] === station).map((i) => i.menuItemId);
+  const chosen = picked.filter((id) => here.includes(id));
+  const blocked = o.status === "blocked";
+  const x = useMotionValue(0);
+  const reveal = useTransform(x, [0, 120], [0, 1]);
+  const send = (ids: string[]) => {
+    if (blocked || !ids.length) return haptic("error");
+    haptic("success");
+    sendItems(act, o, ids, station);
+    setPicked([]);
+  };
+  const split = o.items.length > 1;
+  return (
+    <div className="relative">
+      <motion.div style={{ opacity: reveal }} className="absolute inset-0 flex items-center rounded-[12px] bg-ok px-5 font-extrabold text-white">
+        <ChevronsRight className="mr-2 size-5" /> Send all to {NEXT[station]}
+      </motion.div>
+      <motion.div
+        drag={blocked ? false : "x"}
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={{ left: 0, right: 0.6 }}
+        style={{ x }}
+        onDragEnd={(_, info) => info.offset.x > 110 && send(here)}
+        className={clsx("card relative touch-pan-y bg-white! p-3.5", o.risk === "critical" && "border-crit/40!", o.risk === "warning" && "border-warn/50!")}
+      >
+        <TicketHead o={o} />
+        <ul className="mt-2 space-y-1">
+          {o.items.map((i) => {
+            const m = menu.find((x) => x.id === i.menuItemId);
+            const stage = o.itemStage[i.menuItemId] ?? "prep";
+            if (stage !== station)
+              return (
+                <li key={i.menuItemId} className="flex min-h-9 items-center gap-3 rounded-[10px] px-3 text-[14px] font-semibold text-faint">
+                  <span className="w-6" />
+                  <span className="tabular-nums">{i.qty}×</span>
+                  <span className="flex-1">{m?.name ?? i.menuItemId}</span>
+                  <span className="rounded-full bg-navy/[0.05] px-2 py-0.5 text-[11px] font-bold">{ORDER.indexOf(stage) > ORDER.indexOf(station) ? `sent · at ${STAGE_NAME[stage]}` : `at ${STAGE_NAME[stage]}`}</span>
+                </li>
+              );
+            const on = chosen.includes(i.menuItemId);
+            return (
+              <li key={i.menuItemId}>
+                <button
+                  disabled={!split}
+                  onClick={() => {
+                    haptic("tick");
+                    setPicked(on ? picked.filter((p) => p !== i.menuItemId) : [...picked, i.menuItemId]);
+                  }}
+                  className={clsx("flex min-h-11 w-full items-center gap-3 rounded-[10px] border px-3 text-left text-[15px] font-semibold transition-colors", on ? "border-ok/40 bg-ok/10" : "border-navy/12 bg-white", !split && "border-transparent! px-0")}
+                >
+                  {split && <span className={clsx("flex size-6 shrink-0 items-center justify-center rounded-[7px] border-2", on ? "border-ok bg-ok text-white" : "border-navy/25")}>{on && <Check className="size-4" strokeWidth={3} />}</span>}
+                  <span className="font-extrabold tabular-nums">{i.qty}×</span>
+                  {m?.name ?? i.menuItemId}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {o.risk !== "normal" && <p className="mt-2 text-[12px] font-semibold text-mute">{o.reason}</p>}
+        <div className="mt-3 flex gap-2">
+          {chosen.length > 0 && chosen.length < here.length && (
+            <button onClick={() => send(chosen)} className="btn btn-navy h-11! flex-1 text-[15px]">
+              Send {chosen.length} to {NEXT[station]}
+            </button>
+          )}
+          <button disabled={blocked} onClick={() => send(here)} className={clsx("btn h-11! flex-1 text-[15px]", primary && !blocked && !(chosen.length > 0 && chosen.length < here.length) && "btn-navy")}>
+            {blocked ? (
+              `Waiting on ${o.blockedBy ?? "stock"}`
+            ) : (
+              <>
+                <Check className="size-4" strokeWidth={3} /> {here.length < o.items.length || chosen.length ? `Send ${here.length === 1 ? "it" : "all " + here.length}` : DONE_LABEL[station]} <ArrowRight className="size-4 opacity-60" /> {NEXT[station]}
+              </>
+            )}
+          </button>
+        </div>
+        {split && <p className="mt-1.5 text-center text-[11px] font-semibold text-faint">Tick finished items to send them ahead on their own</p>}
+      </motion.div>
+    </div>
+  );
+}
+
+/** Same component waiting in several orders at this station: finish them in one go. */
+function Batches({ orders, station }: { orders: OrderView[]; station: StationId }) {
+  const act = useTwin((s) => s.act);
+  const cfg = useTwin((s) => s.kitchen.config);
+  const groups = new Map<string, { o: OrderView; id: string; qty: number }[]>();
+  for (const o of orders) {
+    if (o.status === "blocked") continue;
+    for (const i of o.items) {
+      if (o.itemStage[i.menuItemId] !== station) continue;
+      const key = Object.keys(cfg.menu.find((m) => m.id === i.menuItemId)?.ingredients ?? {})[0] ?? i.menuItemId;
+      groups.set(key, [...(groups.get(key) ?? []), { o, id: i.menuItemId, qty: i.qty }]);
+    }
+  }
+  const shared = [...groups].filter(([, g]) => new Set(g.map((x) => x.o.id)).size > 1);
+  if (!shared.length) return null;
+  return (
+    <section className="mb-3 rounded-[12px] border border-navy/12 bg-navy/[0.035] p-3">
+      <div className="mb-2 flex items-center gap-2 text-[13px] font-extrabold">
+        <Layers className="size-4 text-navy" /> Do together
+        <span className="font-semibold text-faint">same component in several orders</span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {shared.map(([key, g]) => {
+          const ing = cfg.ingredients.find((x) => x.id === key);
+          const qty = g.reduce((n, x) => n + x.qty, 0);
+          return (
+            <div key={key} className="card bg-white! p-3">
+              <div className="flex items-baseline gap-2">
+                <span className="text-[16px] font-extrabold">{ing?.name ?? key}</span>
+                <span className="font-bold text-mute tabular-nums">×{qty}</span>
+              </div>
+              <div className="mt-1 text-[12px] font-semibold text-mute">
+                {g.map((x) => `${x.o.label} ${cfg.menu.find((m) => m.id === x.id)?.short ?? x.id}`).join(" · ")}
+              </div>
+              <button
+                className="btn btn-navy mt-2 h-10! w-full"
+                onClick={() => {
+                  haptic("success");
+                  for (const x of g) void act({ type: "item_done", orderId: x.o.id, menuItemId: x.id, station });
+                }}
+              >
+                <Check className="size-4" strokeWidth={3} /> All {qty} done <ArrowRight className="size-4 opacity-60" /> {NEXT[station]}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 function Items({ o, checklist }: { o: OrderView; checklist?: boolean }) {
   const menu = useTwin((s) => s.kitchen.config.menu);
@@ -23,6 +169,16 @@ function Items({ o, checklist }: { o: OrderView; checklist?: boolean }) {
       {o.items.map((i) => {
         const m = menu.find((x) => x.id === i.menuItemId);
         const packed = o.packed.includes(i.menuItemId);
+        const stage = o.itemStage[i.menuItemId] ?? "prep";
+        if (checklist && stage !== "pack" && stage !== "done")
+          return (
+            <li key={i.menuItemId} className="flex min-h-11 items-center gap-3 rounded-[10px] border border-dashed border-navy/15 px-3 text-[15px] font-semibold text-faint">
+              <span className="size-6 shrink-0" />
+              <span className="font-extrabold tabular-nums">{i.qty}×</span>
+              <span className="flex-1">{m?.name ?? i.menuItemId}</span>
+              <span className="text-[11px] font-bold">on the way · at {STAGE_NAME[stage]}</span>
+            </li>
+          );
         if (!checklist)
           return (
             <li key={i.menuItemId} className="flex items-center gap-2 text-[15px] font-semibold">
@@ -75,9 +231,10 @@ function SwipeTicket({ o, station, primary }: { o: OrderView; station: StationId
   const act = useTwin((s) => s.act);
   const x = useMotionValue(0);
   const reveal = useTransform(x, [0, 120], [0, 1]);
+  const waiting = station === "pack" ? o.items.filter((i) => !["pack", "done"].includes(o.itemStage[i.menuItemId] ?? "prep")).length : 0;
   const needsPacking = station === "pack" && o.items.some((i) => !o.packed.includes(i.menuItemId));
   const blocked = o.status === "blocked";
-  const disabled = blocked || needsPacking;
+  const disabled = blocked || needsPacking || waiting > 0;
   const done = () => {
     if (disabled) return haptic("error");
     haptic("success");
@@ -102,6 +259,8 @@ function SwipeTicket({ o, station, primary }: { o: OrderView; station: StationId
         <button disabled={disabled} onClick={done} className={clsx("btn mt-3 h-11! w-full text-[15px]", primary && !disabled && "btn-navy")}>
           {blocked ? (
             `Waiting on ${o.blockedBy ?? "stock"}`
+          ) : waiting > 0 ? (
+            `Waiting for ${waiting} more item${waiting > 1 ? "s" : ""}`
           ) : needsPacking ? (
             "Check every item into the bag"
           ) : (
@@ -232,14 +391,13 @@ export function StationScreen() {
   let later: OrderView[];
   let laterTitle: string;
   if (station === "prep") {
-    const atPrep = state.orders.filter((o) => ["queued", "prepping", "blocked"].includes(o.status));
+    const atPrep = state.orders.filter((o) => OPEN(o) && hasItemsAt(o, "prep"));
     now = atPrep.filter((o) => !startsLater(o)).sort(byFire);
     later = [...atPrep.filter(startsLater), ...state.orders.filter((o) => o.status === "held" || o.status === "deferred")].sort(byFire);
     laterTitle = "Start later";
   } else {
-    now = state.orders.filter((o) => o.status === (station === "cook" ? "cooking" : "packing")).sort(byFire);
-    const upstream = station === "cook" ? ["queued", "prepping", "blocked"] : ["queued", "prepping", "cooking", "blocked"];
-    later = state.orders.filter((o) => upstream.includes(o.status)).sort(byFire);
+    now = state.orders.filter((o) => OPEN(o) && hasItemsAt(o, station)).sort(byFire);
+    later = state.orders.filter((o) => OPEN(o) && !hasItemsAt(o, station) && before(o, station)).sort(byFire);
     laterTitle = "Coming up";
   }
 
@@ -267,12 +425,11 @@ export function StationScreen() {
           <LayoutGrid className="size-4" /> Whole kitchen
         </button>
       </div>
+      {station !== "pack" && <Batches orders={now} station={station} />}
       <div className={clsx("grid gap-4 lg:min-h-0 lg:flex-1", station === "pack" ? "lg:grid-cols-[1.3fr_1fr_1fr]" : "lg:grid-cols-[1.6fr_1fr]")}>
         <Column title={station === "prep" ? "Start now" : `Now at ${s?.name ?? station}`} hint={station === "prep" ? "timed to each pickup" : undefined} count={now.length}>
           {now.length === 0 && <Empty text={station === "prep" && later.length ? "Nothing to start yet. Tickets move here when it's time to fire them." : "All caught up. New tickets appear here as soon as they reach you."} />}
-          {now.map((o, i) => (
-            <SwipeTicket key={o.id} o={o} station={station} primary={i === 0} />
-          ))}
+          {now.map((o, i) => (station === "pack" ? <SwipeTicket key={o.id} o={o} station={station} primary={i === 0} /> : <ComponentTicket key={o.id} o={o} station={station} primary={i === 0} />))}
         </Column>
         <Column title={laterTitle} count={later.length}>
           {later.length === 0 && <Empty text="Nothing waiting." />}
@@ -288,7 +445,7 @@ export function StationScreen() {
                 <div className="mt-1.5 flex items-center gap-2">
                   <DasherChip o={o} />
                   {station === "prep" && startsLater(o) && (
-                    <button className="btn ml-auto h-8!" onClick={() => void act({ type: "task_done", orderId: o.id, station: "prep" })}>
+                    <button className="btn ml-auto h-8!" onClick={() => sendItems(act, o, o.items.filter((i) => o.itemStage[i.menuItemId] === "prep").map((i) => i.menuItemId), "prep")}>
                       Prep done early
                     </button>
                   )}
