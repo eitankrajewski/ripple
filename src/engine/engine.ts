@@ -437,6 +437,32 @@ export function ingestEvent(k: Kitchen, event: OrderEvent): Kitchen {
       for (const o of k.orders) if (o.held && canAllocate(k, o)) o.held = false;
       break;
     }
+    case "menu_item_removed": {
+      const m = k.config.menu.find((x) => x.id === event.menuItemId && !x.retired);
+      if (!m) break;
+      k.config = { ...k.config, menu: k.config.menu.map((x) => (x.id === m.id ? { ...x, retired: true } : x)) };
+      pushFeed(k, "system", `Menu: ${m.name} removed${event.by ? ` · ${event.by}` : ""}`);
+      break;
+    }
+    case "ingredient_removed": {
+      const id = event.ingredientId;
+      const g = k.config.ingredients.find((i) => i.id === id);
+      if (!g || !id) break;
+      k.config = {
+        ...k.config,
+        ingredients: k.config.ingredients.filter((i) => i.id !== id),
+        menu: k.config.menu.map((m) => {
+          if (!(id in m.ingredients)) return m;
+          const rest = { ...m.ingredients };
+          delete rest[id];
+          return { ...m, ingredients: rest };
+        }),
+      };
+      delete k.inventory[id];
+      pushFeed(k, "system", `Pantry: ${g.name} removed${event.by ? ` · ${event.by}` : ""}`);
+      for (const o of k.orders) if (o.held && canAllocate(k, o)) o.held = false;
+      break;
+    }
     case "item_done": {
       if (event.orderId && event.menuItemId && event.station) completeItem(k, event.orderId, event.menuItemId, event.station, event.by);
       break;

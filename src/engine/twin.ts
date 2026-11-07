@@ -428,7 +428,7 @@ export function deriveState(k: Kitchen): DigitalTwinState {
   return {
     layout: k.layout,
     basePoses: k.basePoses ?? {},
-    menu: cfg.menu.map((m) => ({ id: m.id, name: m.name, ingredients: m.ingredients, minutes: m.minutes })),
+    menu: cfg.menu.filter((m) => !m.retired).map((m) => ({ id: m.id, name: m.name, ingredients: m.ingredients, minutes: m.minutes })),
     scenarioId: cfg.scenarioId,
     phase: k.phase,
     clockSeconds: k.clockSeconds,

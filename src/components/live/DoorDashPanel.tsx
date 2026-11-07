@@ -1,5 +1,5 @@
 import { Copy, Minus, Plus, Send } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { haptic } from "../../lib/haptics";
 import { minutes } from "../../lib/ui";
 import { backend, DOORDASH_ACTOR, uid } from "../../live/backend";
@@ -11,7 +11,8 @@ const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
 
 /** DoorDash intake: a test-order sender for demos plus the webhook details for the real integration. */
 export function DoorDashPanel() {
-  const menu = useTwin((s) => s.kitchen.config.menu);
+  const allMenu = useTwin((s) => s.kitchen.config.menu);
+  const menu = useMemo(() => allMenu.filter((m) => !m.retired), [allMenu]);
   const orders = useTwin((s) => s.state.orders);
   const session = useTwin((s) => s.live.session);
   const liveDo = useTwin((s) => s.liveDo);

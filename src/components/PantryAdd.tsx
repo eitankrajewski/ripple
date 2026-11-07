@@ -11,9 +11,10 @@ function AddIngredient({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("portions");
   const [stock, setStock] = useState("20");
-  const bare = cfg.menu.filter((m) => !Object.keys(m.ingredients).length).map((m) => m.id);
+  const live = cfg.menu.filter((m) => !m.retired);
+  const bare = live.filter((m) => !Object.keys(m.ingredients).length).map((m) => m.id);
   const [used, setUsed] = useState<string[]>(bare);
-  const menu = [...cfg.menu].sort((a, b) => Number(bare.includes(b.id)) - Number(bare.includes(a.id)));
+  const menu = [...live].sort((a, b) => Number(bare.includes(b.id)) - Number(bare.includes(a.id)));
   let id = slug(name);
   const taken = cfg.ingredients.find((i) => i.id === id);
   if (taken && taken.name.toLowerCase() !== name.trim().toLowerCase()) id = `${id}_2`;
@@ -92,7 +93,7 @@ export function PantryAdd() {
   const [adding, setAdding] = useState(false);
   if (!canAdd) return null;
   if (adding) return <AddIngredient onDone={() => setAdding(false)} />;
-  const bare = menu.filter((m) => !Object.keys(m.ingredients).length);
+  const bare = menu.filter((m) => !m.retired && !Object.keys(m.ingredients).length);
   return (
     <div className="mb-2 space-y-2">
       <button className="btn h-9! w-full" onClick={() => setAdding(true)}>

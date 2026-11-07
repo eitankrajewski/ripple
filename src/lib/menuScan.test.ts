@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG } from "../engine/seed";
-import { parseMenuText, wordsToLines } from "./menuScan";
+import { parseMenuText, suggestIngredients, wordsToLines } from "./menuScan";
 
 describe("menu scan parsing", () => {
+  it("suggests ingredients the pantry doesn't have yet", () => {
+    expect(suggestIngredients("Margherita Pizza", DEFAULT_CONFIG.ingredients)).toEqual({
+      ingredients: { pizza_dough: 1, mozzarella: 1, tomato_sauce: 1 },
+      fresh: { pizza_dough: "Pizza dough", mozzarella: "Mozzarella", tomato_sauce: "Tomato sauce" },
+    });
+    expect(suggestIngredients("Veggie Burger", DEFAULT_CONFIG.ingredients)).toEqual({ ingredients: { veggie: 1, bun: 1 }, fresh: {} });
+  });
+
   it("turns priced menu lines into items with guessed ingredients", () => {
     const text = "BURGERS\nSpicy Chicken Sandwich ........ $11.50\nDouble Cheeseburger 13.00\nGarden Veggie Wrap $10\nFresh, local and made to order\nCaesar Salad $9.25\n";
     const d = parseMenuText(text, DEFAULT_CONFIG.ingredients, ["caesar_salad"]);

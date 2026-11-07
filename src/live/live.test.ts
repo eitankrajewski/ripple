@@ -173,6 +173,23 @@ describe("item-level routing, layout and menu", () => {
     expect(k.config.menu.find((m) => m.id === "wings")!.ingredients).toEqual({ avocado: 1 });
   });
 
+  it("managers remove dishes and pantry ingredients without breaking orders already in the kitchen", () => {
+    expect(allowed("prep", { type: "menu_item_removed", menuItemId: "wrap" })).toBe(false);
+    expect(allowed("manager", { type: "ingredient_removed", ingredientId: "onion" })).toBe(true);
+    const id = order.items[0].menuItemId;
+    const k = replay(START, [
+      ev(1, manager, order),
+      ev(2, manager, { type: "menu_item_removed", menuItemId: id }),
+      ev(3, manager, { type: "ingredient_removed", ingredientId: "onion" }),
+    ]);
+    const s = deriveState(k);
+    expect(s.menu.some((m) => m.id === id)).toBe(false);
+    expect(s.orders).toHaveLength(1);
+    expect(k.config.ingredients.some((i) => i.id === "onion")).toBe(false);
+    expect(k.inventory.onion).toBeUndefined();
+    expect(k.config.menu.every((m) => !("onion" in m.ingredients))).toBe(true);
+  });
+
   it("managers move and rotate stations, shift staff and hold orders", () => {
     expect(allowed("prep", { type: "station_moved", id: "cook", x: 0, z: 0, rot: 0 })).toBe(false);
     expect(allowed("cook", { type: "staff_moved", from: "prep", to: "cook" })).toBe(false);

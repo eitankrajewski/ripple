@@ -76,6 +76,8 @@ export type LiveAction =
   | { type: "hold_order"; orderId: string }
   | { type: "menu_item_added"; item: NewMenuItem }
   | { type: "ingredient_added"; ingredient: NewIngredient }
+  | { type: "menu_item_removed"; menuItemId: string }
+  | { type: "ingredient_removed"; ingredientId: string }
   | { type: "picked_up"; orderId: string }
   | { type: "stock_correction"; ingredientId: string; newStock: number }
   | {

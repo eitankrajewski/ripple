@@ -1,13 +1,14 @@
 import clsx from "clsx";
 import { Minus, Plus } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { OrderItem, OrderSource } from "../../engine/types";
 import { SOURCE } from "../../lib/ui";
 import { useTwin } from "../../store";
 
 /** Front-of-house order entry. Publishes an order_received event to every device. */
 export function NewOrderForm({ onDone }: { onDone?: () => void }) {
-  const menu = useTwin((s) => s.kitchen.config.menu);
+  const allMenu = useTwin((s) => s.kitchen.config.menu);
+  const menu = useMemo(() => allMenu.filter((m) => !m.retired), [allMenu]);
   const liveDo = useTwin((s) => s.liveDo);
   const [source, setSource] = useState<OrderSource>("walk_in");
   const [customer, setCustomer] = useState("");

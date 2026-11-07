@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Check, Loader2, Pencil, Sparkles } from "lucide-react";
+import { Check, Loader2, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { useState, type ComponentType, type ReactNode } from "react";
 import type { Explanation, InventoryView, OrderView, RiskLevel } from "../engine/types";
 import { minutes, RISK_HEX, RISK_LABEL, statusLabel } from "../lib/ui";
@@ -159,9 +159,32 @@ export function OrderRow({ o, compact }: { o: OrderView; compact?: boolean }) {
   );
 }
 
+/** Trash icon that asks once more before removing. */
+export function RemoveButton({ label, onRemove }: { label: string; onRemove: () => void }) {
+  const [ask, setAsk] = useState(false);
+  if (ask)
+    return (
+      <span className="flex shrink-0 items-center gap-1" onMouseLeave={() => setAsk(false)}>
+        <button className="rounded-[6px] bg-crit px-1.5 py-0.5 text-[11px] font-bold text-white" onClick={onRemove}>
+          Remove
+        </button>
+        <button className="rounded-[6px] px-1 py-0.5 text-[11px] font-bold text-mute hover:bg-navy/[0.06]" onClick={() => setAsk(false)}>
+          Keep
+        </button>
+      </span>
+    );
+  return (
+    <button className="shrink-0 rounded-[6px] p-1 text-faint hover:bg-crit/10 hover:text-crit" onClick={() => setAsk(true)} title={`Remove ${label}`} aria-label={`Remove ${label}`}>
+      <Trash2 className="size-3.5" />
+    </button>
+  );
+}
+
 export function PantryRow({ i }: { i: InventoryView }) {
   const correct = useTwin((s) => s.correctStock);
   const canEdit = useCan("correct_stock");
+  const canRemove = useCan("manage_menu");
+  const act = useTwin((s) => s.act);
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(String(i.onHand));
   const ratio = i.need === 0 ? 0 : Math.min(1, i.need / Math.max(1, i.onHand));
@@ -203,6 +226,7 @@ export function PantryRow({ i }: { i: InventoryView }) {
             {canEdit && <Pencil className="size-3 text-faint group-hover:text-accent" />}
           </button>
         )}
+        {canRemove && !editing && <RemoveButton label={i.name} onRemove={() => void act({ type: "ingredient_removed", ingredientId: i.id })} />}
       </div>
       <div className="mt-1 pl-4">
         <LoadBar value={ratio} />

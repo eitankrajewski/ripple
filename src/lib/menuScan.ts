@@ -5,6 +5,10 @@ export interface MenuDraft extends NewMenuItem {
   price?: number;
   description?: string;
   keep: boolean;
+  /** Suggested ingredients that aren't in the pantry yet (id → name); ticked ones are created on save. */
+  fresh?: Record<string, string>;
+  /** The manager changed the ingredients by hand, so renaming the dish no longer re-suggests them. */
+  touched?: boolean;
 }
 
 const ALIASES: Record<string, string[]> = {
@@ -38,6 +42,97 @@ export function guessIngredients(text: string, known: IngredientConfig[]): Recor
   if (out.chicken && !/beef|cheeseburger|steak/.test(t)) delete out.beef;
   if (out.tortilla) delete out.bun;
   return out;
+}
+
+/** Common restaurant ingredients and the menu words that usually mean a dish contains them. */
+const COMMON: [name: string, words: string[]][] = [
+  ["Chicken", ["chicken", "chx", "tender", "wing", "nugget"]],
+  ["Beef", ["beef", "burger", "patty", "steak", "brisket", "cheesesteak", "meatball"]],
+  ["Pork", ["pork", "carnitas", "pulled pork", "al pastor"]],
+  ["Bacon", ["bacon", "blt"]],
+  ["Ham", ["ham", "cubano"]],
+  ["Sausage", ["sausage", "chorizo", "bratwurst"]],
+  ["Pepperoni", ["pepperoni"]],
+  ["Turkey", ["turkey"]],
+  ["Salmon", ["salmon", "lox"]],
+  ["Shrimp", ["shrimp", "prawn"]],
+  ["Tuna", ["tuna", "ahi"]],
+  ["White fish", ["fish", "cod", "tilapia", "halibut"]],
+  ["Tofu", ["tofu"]],
+  ["Falafel", ["falafel"]],
+  ["Eggs", ["egg", "omelet", "omelette", "benedict", "frittata"]],
+  ["Lettuce", ["lettuce", "salad", "greens", "caesar", "romaine", "blt"]],
+  ["Spinach", ["spinach", "florentine"]],
+  ["Tomato", ["tomato", "blt", "caprese", "bruschetta", "pico"]],
+  ["Onion", ["onion", "pico"]],
+  ["Peppers", ["pepper", "jalapeno", "jalapeño", "fajita", "poblano"]],
+  ["Mushrooms", ["mushroom", "portobello"]],
+  ["Avocado", ["avocado", "guacamole", "guac"]],
+  ["Cucumber", ["cucumber", "tzatziki"]],
+  ["Corn", ["corn", "elote"]],
+  ["Pickles", ["pickle"]],
+  ["Potatoes", ["fries", "potato", "hash brown", "tots", "wedges"]],
+  ["Rice", ["rice", "risotto", "burrito bowl", "poke", "sushi", "bibimbap"]],
+  ["Beans", ["bean", "burrito", "chili"]],
+  ["Pasta", ["pasta", "spaghetti", "penne", "fettuccine", "linguine", "lasagna", "mac and cheese", "ravioli", "rigatoni", "alfredo"]],
+  ["Noodles", ["noodle", "ramen", "pho", "lo mein", "pad thai", "udon"]],
+  ["Pizza dough", ["pizza", "calzone", "flatbread", "margherita"]],
+  ["Mozzarella", ["mozzarella", "pizza", "margherita", "caprese", "calzone"]],
+  ["Parmesan", ["parmesan", "parm", "caesar", "alfredo"]],
+  ["Cheese", ["cheese", "cheddar", "swiss", "melt", "queso", "quesadilla", "nachos"]],
+  ["Tomato sauce", ["marinara", "pizza", "spaghetti", "lasagna", "bolognese", "parm"]],
+  ["Buns", ["burger", "sandwich", "bun", "slider", "sub", "hot dog", "hoagie"]],
+  ["Bread", ["toast", "bread", "panini", "grilled cheese", "bruschetta", "croissant", "bagel"]],
+  ["Tortillas", ["wrap", "burrito", "taco", "quesadilla", "tortilla", "fajita", "enchilada"]],
+  ["Pita", ["pita", "gyro", "shawarma"]],
+  ["Hummus", ["hummus"]],
+  ["Croutons", ["caesar", "crouton"]],
+  ["Tortilla chips", ["nachos", "chips and salsa", "chips & salsa"]],
+  ["Sour cream", ["sour cream", "nachos"]],
+  ["Salsa", ["salsa", "nachos", "pico"]],
+  ["Butter", ["butter", "pancake", "waffle"]],
+  ["Pancake batter", ["pancake", "waffle", "crepe"]],
+  ["Maple syrup", ["pancake", "waffle", "maple"]],
+  ["Berries", ["berry", "berries", "strawberry", "blueberry"]],
+  ["Banana", ["banana"]],
+  ["Yogurt", ["yogurt", "parfait", "tzatziki"]],
+  ["Granola", ["granola", "parfait"]],
+  ["Ice cream", ["ice cream", "sundae", "shake", "float"]],
+  ["Milk", ["milk", "shake", "latte", "cappuccino"]],
+  ["Coffee", ["coffee", "espresso", "latte", "cappuccino", "americano", "mocha"]],
+  ["Chocolate", ["chocolate", "brownie", "mocha", "fudge"]],
+  ["Lemon", ["lemon", "lemonade"]],
+  ["BBQ sauce", ["bbq", "barbecue"]],
+  ["Buffalo sauce", ["buffalo"]],
+  ["Ranch", ["ranch"]],
+];
+
+const hasWord = (text: string, w: string) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(s|es)?\\b`).test(text);
+
+/**
+ * Suggests ingredients for a dish: pantry items it likely uses, plus common ingredients
+ * that aren't in the pantry yet (returned in `fresh` so the manager can create them).
+ */
+export function suggestIngredients(text: string, known: IngredientConfig[]): { ingredients: Record<string, number>; fresh: Record<string, string> } {
+  const t = text.toLowerCase();
+  const ingredients = guessIngredients(text, known);
+  const fresh: Record<string, string> = {};
+  for (const [name, words] of COMMON) {
+    if (!words.some((w) => hasWord(t, w))) continue;
+    const id = slug(name);
+    const have = known.find((i) => i.id === id || i.name.toLowerCase() === name.toLowerCase());
+    if (have) ingredients[have.id] = 1;
+    else {
+      fresh[id] = name;
+      ingredients[id] = 1;
+    }
+  }
+  if (/chicken|turkey|fish|salmon|shrimp|tofu|veg|plant|impossible|beyond/.test(t) && !/beef|steak|brisket|meatball/.test(t)) {
+    delete ingredients.beef;
+    delete fresh.beef;
+  }
+  if (ingredients.tortilla) delete ingredients.bun;
+  return { ingredients, fresh };
 }
 
 export function guessMinutes(text: string): Record<StationId, number> {
@@ -185,10 +280,12 @@ export function parseMenuLines(lines: MenuLine[], known: IngredientConfig[], exi
     while (seen.has(id)) id = `${id}_2`;
     seen.add(id);
     const about = `${d.name} ${d.desc.join(" ")} ${d.section}`;
+    const { ingredients, fresh } = suggestIngredients(about, known);
     drafts.push({
       id,
       name: d.name,
-      ingredients: guessIngredients(about, known),
+      ingredients,
+      fresh,
       minutes: guessMinutes(`${d.name} ${d.section}`),
       price: d.price,
       description: d.desc.join(" ").replace(/\s{2,}/g, " ").trim() || undefined,

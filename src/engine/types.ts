@@ -43,7 +43,8 @@ export interface OrderItem {
 export interface OrderEvent {
   type:
     | "order_received" | "rush_order" | "stock_correction" | "task_done" | "picked_up" | "move_order" | "pack_item" | "dasher_update" | "handoff_mismatch"
-    | "item_done" | "station_added" | "station_removed" | "menu_item_added" | "ingredient_added" | "station_moved" | "staff_moved" | "hold_order";
+    | "item_done" | "station_added" | "station_removed" | "menu_item_added" | "ingredient_added" | "station_moved" | "staff_moved" | "hold_order"
+    | "menu_item_removed" | "ingredient_removed";
   /** Layout changes (station_added / station_removed). */
   placed?: PlacedStation;
   placedId?: string;

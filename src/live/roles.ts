@@ -61,6 +61,8 @@ const ACTION_PERMISSION: Record<LiveAction["type"], Permission | null> = {
   hold_order: "hold_orders",
   menu_item_added: "manage_menu",
   ingredient_added: "manage_menu",
+  menu_item_removed: "manage_menu",
+  ingredient_removed: "manage_menu",
   picked_up: "pick_up",
   stock_correction: "correct_stock",
   approve_plan: "approve_plan",

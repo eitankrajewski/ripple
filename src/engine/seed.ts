@@ -13,6 +13,8 @@ export interface MenuItemConfig {
   emoji: string;
   ingredients: Record<string, number>;
   minutes: Record<StationId, number>;
+  /** Removed from the menu; kept so orders already in the kitchen still resolve. */
+  retired?: boolean;
 }
 
 export interface IngredientConfig {
