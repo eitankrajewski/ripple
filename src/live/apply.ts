@@ -29,6 +29,18 @@ export function applyAction(k: Kitchen, a: LiveAction, by?: string) {
     case "handoff_mismatch":
       ingestEvent(k, { type: "handoff_mismatch", orderId: a.orderId, by });
       break;
+    case "item_done":
+      ingestEvent(k, { type: "item_done", orderId: a.orderId, menuItemId: a.menuItemId, station: a.station, by });
+      break;
+    case "station_added":
+      ingestEvent(k, { type: "station_added", placed: a.station, by });
+      break;
+    case "station_removed":
+      ingestEvent(k, { type: "station_removed", placedId: a.id, by });
+      break;
+    case "menu_item_added":
+      ingestEvent(k, { type: "menu_item_added", menuItem: a.item, by });
+      break;
     case "task_done":
       ingestEvent(k, { type: "task_done", orderId: a.orderId, station: a.station, by });
       break;

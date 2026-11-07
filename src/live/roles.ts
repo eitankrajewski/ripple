@@ -5,7 +5,7 @@ export const ROLES: Record<Role, RoleInfo> = {
     id: "manager",
     label: "Manager",
     description: "Owns the kitchen. Sees the full twin, approves plans and manages the team.",
-    permissions: ["view_twin", "add_order", "check_off", "pick_up", "correct_stock", "approve_plan", "hold_orders", "manage_team", "move_orders", "pack", "update_pickup"],
+    permissions: ["view_twin", "add_order", "check_off", "pick_up", "correct_stock", "approve_plan", "hold_orders", "manage_team", "move_orders", "pack", "update_pickup", "manage_layout", "manage_menu"],
   },
   prep: {
     id: "prep",
@@ -53,6 +53,10 @@ const ACTION_PERMISSION: Record<LiveAction["type"], Permission | null> = {
   member_left: null,
   order_received: "add_order",
   task_done: "check_off",
+  item_done: "check_off",
+  station_added: "manage_layout",
+  station_removed: "manage_layout",
+  menu_item_added: "manage_menu",
   picked_up: "pick_up",
   stock_correction: "correct_stock",
   approve_plan: "approve_plan",
@@ -68,6 +72,6 @@ const ACTION_PERMISSION: Record<LiveAction["type"], Permission | null> = {
 export function allowed(role: Role, action: LiveAction) {
   const perm = ACTION_PERMISSION[action.type];
   if (perm && !can(role, perm)) return false;
-  if (action.type === "task_done" && role !== "manager" && ROLES[role].station !== action.station) return false;
+  if ((action.type === "task_done" || action.type === "item_done") && role !== "manager" && ROLES[role].station !== action.station) return false;
   return true;
 }

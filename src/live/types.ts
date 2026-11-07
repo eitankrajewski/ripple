@@ -1,4 +1,4 @@
-import type { OrderItem, OrderSource, StationId, StrategyId } from "../engine/types";
+import type { NewMenuItem, OrderItem, OrderSource, PlacedStation, StationId, StrategyId } from "../engine/types";
 
 /** What a signed-in device is allowed to see and do in a kitchen. */
 export type Role = "manager" | "prep" | "cook" | "expo" | "host" | "integration";
@@ -14,7 +14,9 @@ export type Permission =
   | "manage_team"
   | "move_orders"
   | "pack"
-  | "update_pickup";
+  | "update_pickup"
+  | "manage_layout"
+  | "manage_menu";
 
 export interface RoleInfo {
   id: Role;
@@ -66,6 +68,10 @@ export type LiveAction =
   | { type: "dasher_update"; orderId?: string; externalId?: string; etaMinutes: number }
   | { type: "handoff_mismatch"; orderId: string }
   | { type: "task_done"; orderId: string; station: StationId }
+  | { type: "item_done"; orderId: string; menuItemId: string; station: StationId }
+  | { type: "station_added"; station: PlacedStation }
+  | { type: "station_removed"; id: string }
+  | { type: "menu_item_added"; item: NewMenuItem }
   | { type: "picked_up"; orderId: string }
   | { type: "stock_correction"; ingredientId: string; newStock: number }
   | {

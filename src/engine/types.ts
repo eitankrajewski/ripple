@@ -2,6 +2,22 @@ export type RiskLevel = "normal" | "warning" | "critical";
 export type StrategyId = "protect_pickups" | "reduce_overload" | "minimize_waste";
 export type StationId = "prep" | "cook" | "pack";
 export type OrderSource = "doordash" | "walk_in" | "phone";
+/** Kinds of station a manager can place in the 3D kitchen. */
+export type StationKind = "orders" | "pantry" | "prep" | "cook" | "pack" | "pickup";
+
+export interface PlacedStation {
+  id: string;
+  kind: StationKind;
+  x: number;
+  z: number;
+}
+
+export interface NewMenuItem {
+  id: string;
+  name: string;
+  ingredients: Record<string, number>;
+  minutes: Record<StationId, number>;
+}
 export type Phase = "initial" | "disrupted" | "approved";
 
 export interface OrderItem {
@@ -10,7 +26,14 @@ export interface OrderItem {
 }
 
 export interface OrderEvent {
-  type: "order_received" | "rush_order" | "stock_correction" | "task_done" | "picked_up" | "move_order" | "pack_item" | "dasher_update" | "handoff_mismatch";
+  type:
+    | "order_received" | "rush_order" | "stock_correction" | "task_done" | "picked_up" | "move_order" | "pack_item" | "dasher_update" | "handoff_mismatch"
+    | "item_done" | "station_added" | "station_removed" | "menu_item_added";
+  /** Layout changes (station_added / station_removed). */
+  placed?: PlacedStation;
+  placedId?: string;
+  /** For menu_item_added. */
+  menuItem?: NewMenuItem;
   orderId?: string;
   source?: OrderSource;
   items?: OrderItem[];
@@ -107,6 +130,8 @@ export interface OrderView {
   dasher?: { name: string; etaMinutes: number };
   /** Menu item ids already checked into the bag at Pack. */
   packed: string[];
+  /** Where each component is; in live mode parts of an order can be at different stations. */
+  itemStage: Record<string, StationId | "done">;
   externalId?: string;
 }
 
@@ -141,6 +166,8 @@ export interface FeedEntry {
 }
 
 export interface DigitalTwinState {
+  layout: PlacedStation[];
+  menu: NewMenuItem[];
   scenarioId: string;
   phase: Phase;
   clockSeconds: number;

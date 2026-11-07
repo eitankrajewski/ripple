@@ -85,6 +85,9 @@ describe("manager moves, packing, couriers", () => {
   it("tracks the pack checklist item by item", () => {
     const k = replay(START, [ev(1, manager, order)]);
     const id = k.orders[0].id;
+    applyLiveEvent(k, ev(4, expo, { type: "pack_item", orderId: id, menuItemId: "beef_burger", checked: true }));
+    expect(deriveState(k).orders[0].packed).toEqual([]);
+    applyLiveEvent(k, ev(5, manager, { type: "move_order", orderId: id, to: "pack" }));
     applyLiveEvent(k, ev(5, expo, { type: "pack_item", orderId: id, menuItemId: "beef_burger", checked: true }));
     expect(deriveState(k).orders[0].packed).toEqual(["beef_burger"]);
     applyLiveEvent(k, ev(6, expo, { type: "pack_item", orderId: id, menuItemId: "beef_burger", checked: false }));
@@ -102,5 +105,58 @@ describe("manager moves, packing, couriers", () => {
     applyLiveEvent(k, ev(3, integration, { type: "dasher_update", externalId: "dd-1", etaMinutes: 3 }));
     expect(deriveState(k).orders[0].fireInMinutes).toBe(0);
     expect(allowed("integration", { type: "approve_plan", plan: { id: "protect_pickups", label: "", heldOrderIds: [], deferredOrderIds: [], batch: false } })).toBe(false);
+  });
+});
+
+describe("item-level routing, layout and menu", () => {
+  const combo: LiveAction = {
+    type: "order_received",
+    source: "walk_in",
+    customer: "Fay",
+    items: [
+      { menuItemId: "beef_burger", qty: 1 },
+      { menuItemId: "veggie_burger", qty: 1 },
+    ],
+  };
+  it("lets one component move ahead and makes Pack wait for all of them", () => {
+    const k = replay(START, [ev(1, manager, combo)]);
+    const id = k.orders[0].id;
+    const steps = [
+      ev(2, prep, { type: "item_done", orderId: id, menuItemId: "beef_burger", station: "prep" }),
+      ev(3, cook, { type: "item_done", orderId: id, menuItemId: "beef_burger", station: "cook" }),
+    ];
+    const k2 = replay(START, [ev(1, manager, combo), ...steps]);
+    const o = deriveState(k2).orders[0];
+    expect(o.itemStage).toEqual({ beef_burger: "pack", veggie_burger: "prep" });
+    const packEarly = replay(START, [ev(1, manager, combo), ...steps, ev(4, expo, { type: "task_done", orderId: id, station: "pack" })]);
+    expect(deriveState(packEarly).orders[0].status).not.toBe("ready");
+    const all = [
+      ...steps,
+      ev(5, prep, { type: "item_done", orderId: id, menuItemId: "veggie_burger", station: "prep" }),
+      ev(6, cook, { type: "item_done", orderId: id, menuItemId: "veggie_burger", station: "cook" }),
+      ev(7, expo, { type: "pack_item", orderId: id, menuItemId: "beef_burger", checked: true }),
+      ev(8, expo, { type: "pack_item", orderId: id, menuItemId: "veggie_burger", checked: true }),
+      ev(9, expo, { type: "task_done", orderId: id, station: "pack" }),
+    ];
+    expect(deriveState(replay(START, [ev(1, manager, combo), ...all])).orders[0].status).toBe("ready");
+  });
+
+  it("rejects another station's item check-off", () => {
+    expect(allowed("cook", { type: "item_done", orderId: "x", menuItemId: "veggie_burger", station: "prep" })).toBe(false);
+  });
+
+  it("only managers change the layout and menu; placed stations add capacity", () => {
+    const station = { id: "s1", kind: "prep" as const, x: 1, z: 2 };
+    expect(allowed("prep", { type: "station_added", station })).toBe(false);
+    expect(allowed("cook", { type: "menu_item_added", item: { id: "wings", name: "Wings", ingredients: {}, minutes: { prep: 1, cook: 2, pack: 0.3 } } })).toBe(false);
+    const before = replay(START, []).config.stations.find((s) => s.id === "prep")!.staff;
+    const k = replay(START, [
+      ev(1, manager, { type: "station_added", station }),
+      ev(2, manager, { type: "menu_item_added", item: { id: "wings", name: "Wings", ingredients: { chicken: 2 }, minutes: { prep: 1, cook: 2, pack: 0.3 } } }),
+    ]);
+    expect(k.layout).toHaveLength(1);
+    expect(k.config.stations.find((s) => s.id === "prep")!.staff).toBe(before + 1);
+    expect(k.config.menu.some((m) => m.id === "wings")).toBe(true);
+    expect(replay(START, []).config.menu.some((m) => m.id === "wings")).toBe(false);
   });
 });

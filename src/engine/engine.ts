@@ -7,6 +7,7 @@ import type {
   OrderItem,
   OrderSource,
   OrderStatus,
+  PlacedStation,
   Phase,
   RiskLevel,
   StationId,
@@ -32,6 +33,8 @@ export interface SimOrder {
   batched: boolean;
   readyAtMin?: number;
   code: string;
+  /** Where each component (menu item) is; lets parts of an order move ahead independently. */
+  itemStage: Record<string, StationId | "done">;
   dasher?: { name: string; etaMin: number };
   packed: string[];
   externalId?: string;
@@ -55,6 +58,8 @@ export interface Ack {
 
 export interface Kitchen {
   config: KitchenConfig;
+  /** Extra stations the manager placed in the 3D kitchen; each one adds a cook to its station. */
+  layout: PlacedStation[];
   rng: number;
   clockSeconds: number;
   nextOrderAtSeconds: number;
@@ -148,6 +153,7 @@ function pushFeed(k: Kitchen, kind: FeedEntry["kind"], text: string, orderId?: s
 export function createKitchen(config: KitchenConfig = DEFAULT_CONFIG): Kitchen {
   const k: Kitchen = {
     config,
+    layout: [],
     rng: config.seed,
     clockSeconds: 0,
     nextOrderAtSeconds: 0,
@@ -211,6 +217,7 @@ function addOrder(k: Kitchen, seed: SeedOrder & { dasherName?: string; dasherEta
     deferred: false,
     batched: false,
     code: pickupCode(k.nextNum),
+    itemStage: Object.fromEntries(seed.items.map((i) => [i.menuItemId, "prep" as const])),
     packed: [],
     externalId: seed.externalId,
   };
@@ -336,12 +343,18 @@ export function ingestEvent(k: Kitchen, event: OrderEvent): Kitchen {
       if (!o || !isOpen(o)) break;
       const station = STATION_IDS.find((s) => o.remaining[s] > 0);
       if (event.station && station !== event.station) break;
+      if (k.live && station === "pack" && o.items.some((i) => !["pack", "done"].includes(o.itemStage[i.menuItemId]))) break;
       if (!o.consumed) {
         if (!canAllocate(k, o)) break;
         consume(k, o);
       }
       if (station) {
         o.remaining[station] = 0;
+        const next = STATION_IDS[STATION_IDS.indexOf(station) + 1] ?? "done";
+        for (const it of o.items) {
+          const st = o.itemStage[it.menuItemId];
+          if (STATION_IDS.indexOf(st as StationId) <= STATION_IDS.indexOf(station)) o.itemStage[it.menuItemId] = next;
+        }
         const name = cfg.stations.find((x) => x.id === station)?.name ?? station;
         pushFeed(k, "system", `${name} done for #${o.num}${event.by ? ` · ${event.by}` : ""}`, o.id);
       }
@@ -352,9 +365,42 @@ export function ingestEvent(k: Kitchen, event: OrderEvent): Kitchen {
       if (event.orderId && event.to) moveOrder(k, event.orderId, event.to, event.by);
       break;
     }
+    case "station_added": {
+      const p = event.placed;
+      if (!p || k.layout.some((x) => x.id === p.id)) break;
+      k.layout = [...k.layout, p];
+      if ((STATION_IDS as string[]).includes(p.kind))
+        k.config = { ...k.config, stations: k.config.stations.map((s) => (s.id === p.kind ? { ...s, staff: s.staff + 1 } : s)) };
+      pushFeed(k, "system", `New ${p.kind} station added${event.by ? ` · ${event.by}` : ""}`);
+      break;
+    }
+    case "station_removed": {
+      const p = k.layout.find((x) => x.id === event.placedId);
+      if (!p) break;
+      k.layout = k.layout.filter((x) => x.id !== p.id);
+      if ((STATION_IDS as string[]).includes(p.kind))
+        k.config = { ...k.config, stations: k.config.stations.map((s) => (s.id === p.kind ? { ...s, staff: Math.max(1, s.staff - 1) } : s)) };
+      pushFeed(k, "system", `${p.kind} station removed${event.by ? ` · ${event.by}` : ""}`);
+      break;
+    }
+    case "menu_item_added": {
+      const m = event.menuItem;
+      if (!m || !m.name.trim()) break;
+      const known = Object.fromEntries(Object.entries(m.ingredients).filter(([id, q]) => q > 0 && k.config.ingredients.some((i) => i.id === id)));
+      const item = { id: m.id, name: m.name.trim(), short: m.name.trim().slice(0, 14), emoji: "🍽️", ingredients: known, minutes: m.minutes };
+      const menu = k.config.menu.some((x) => x.id === m.id) ? k.config.menu.map((x) => (x.id === m.id ? item : x)) : [...k.config.menu, item];
+      k.config = { ...k.config, menu };
+      pushFeed(k, "system", `Menu: ${item.name} added${event.by ? ` · ${event.by}` : ""}`);
+      break;
+    }
+    case "item_done": {
+      if (event.orderId && event.menuItemId && event.station) completeItem(k, event.orderId, event.menuItemId, event.station, event.by);
+      break;
+    }
     case "pack_item": {
       const o = k.orders.find((x) => x.id === event.orderId);
       if (!o || !event.menuItemId || !o.items.some((i) => i.menuItemId === event.menuItemId)) break;
+      if (k.live && event.checked !== false && o.itemStage[event.menuItemId] !== "pack") break;
       o.packed = o.packed.filter((m) => m !== event.menuItemId);
       if (event.checked !== false) o.packed.push(event.menuItemId);
       break;
@@ -426,6 +472,7 @@ export function moveOrder(k: Kitchen, orderId: string, to: StationId | "ready", 
     if (i < idx) o.remaining[s] = 0;
     else if (o.remaining[s] <= 0) o.remaining[s] = base[s];
   });
+  for (const it of o.items) o.itemStage[it.menuItemId] = to === "ready" ? "done" : to;
   o.held = false;
   o.deferred = false;
   if (idx < STATION_IDS.length) {
@@ -437,6 +484,44 @@ export function moveOrder(k: Kitchen, orderId: string, to: StationId | "ready", 
   if (to === "ready" && isOpen(o)) markReady(k, o);
   evaluatePhase(k);
   return k;
+}
+
+/** Recomputes station work from where each component is (used after item-level moves). */
+export function syncWorkFromItems(k: Kitchen, o: SimOrder) {
+  const w: Record<StationId, number> = { prep: 0, cook: 0, pack: 0 };
+  for (const it of o.items) {
+    const stage = o.itemStage[it.menuItemId] ?? "prep";
+    const at = stage === "done" ? STATION_IDS.length : STATION_IDS.indexOf(stage);
+    const m = menuItem(k.config, it.menuItemId);
+    STATION_IDS.forEach((s, i) => {
+      if (i >= at) w[s] += m.minutes[s] * it.qty;
+    });
+  }
+  for (const s of STATION_IDS) o.remaining[s] = Math.round(w[s] * 100) / 100;
+}
+
+/** One component of an order finished at a station and moves to the next one. */
+export function completeItem(k: Kitchen, orderId: string, menuItemId: string, station: StationId, by?: string): boolean {
+  const o = k.orders.find((x) => x.id === orderId);
+  if (!o || !isOpen(o) || o.itemStage[menuItemId] !== station) return false;
+  if (!o.consumed) {
+    if (!canAllocate(k, o)) return false;
+    consume(k, o);
+  }
+  const next = STATION_IDS[STATION_IDS.indexOf(station) + 1] ?? "done";
+  o.itemStage[menuItemId] = station === "pack" ? "pack" : next;
+  if (station === "pack") {
+    if (!o.packed.includes(menuItemId)) o.packed.push(menuItemId);
+  }
+  syncWorkFromItems(k, o);
+  if (station === "pack" && o.items.every((i) => o.packed.includes(i.menuItemId))) {
+    for (const i of o.items) o.itemStage[i.menuItemId] = "done";
+    syncWorkFromItems(k, o);
+  }
+  const name = menuItem(k.config, menuItemId).name;
+  pushFeed(k, "system", `${name} for #${o.num} ${station === "pack" ? "bagged" : `sent to ${k.config.stations.find((s) => s.id === next)?.name ?? next}`}${by ? ` · ${by}` : ""}`, o.id);
+  if (STATION_IDS.every((s) => o.remaining[s] <= 0)) markReady(k, o);
+  return true;
 }
 
 export function sortForPlan(k: Kitchen, orders: SimOrder[], mode: PlanMode): SimOrder[] {

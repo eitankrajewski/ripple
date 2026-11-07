@@ -389,6 +389,9 @@ export function deriveState(k: Kitchen): DigitalTwinState {
       dasher: o.dasher ? { name: o.dasher.name, etaMinutes: o.dasher.etaMin - now } : undefined,
       packed: o.packed,
       externalId: o.externalId,
+      itemStage: k.live
+        ? { ...o.itemStage }
+        : Object.fromEntries(o.items.map((i) => [i.menuItemId, STATION_IDS.find((s) => o.remaining[s] > 0) ?? "done"])),
     };
   });
 
@@ -423,6 +426,8 @@ export function deriveState(k: Kitchen): DigitalTwinState {
       : `${((Math.floor(clockMin / 60) + 11) % 12) + 1}:${String(clockMin % 60).padStart(2, "0")} PM`;
 
   return {
+    layout: k.layout,
+    menu: cfg.menu.map((m) => ({ id: m.id, name: m.name, ingredients: m.ingredients, minutes: m.minutes })),
     scenarioId: cfg.scenarioId,
     phase: k.phase,
     clockSeconds: k.clockSeconds,
