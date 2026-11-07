@@ -1,4 +1,5 @@
 import { allowed } from "./roles";
+import { DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./supabaseConfig";
 import { SupabaseBackend } from "./supabaseBackend";
 import type { Actor, KitchenSpace, LiveAction, LiveEvent, LiveSession, Member, Role } from "./types";
 
@@ -157,9 +158,9 @@ export class LocalBackend implements LiveBackend {
   }
 }
 
-const RAW_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const RAW_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || DEFAULT_SUPABASE_URL;
 const SUPABASE_URL = RAW_URL?.startsWith("/") ? `${location.origin}${RAW_URL}` : RAW_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || DEFAULT_SUPABASE_ANON_KEY;
 
 /** Hosted (Supabase) when configured, otherwise the in-browser preview. */
 export const backend: LiveBackend = SUPABASE_URL && SUPABASE_KEY ? new SupabaseBackend(SUPABASE_URL, SUPABASE_KEY) : new LocalBackend();
