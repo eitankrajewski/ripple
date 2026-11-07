@@ -61,6 +61,9 @@ interface Store {
   tab: Tab;
   nav: NavTab;
   area: AreaId | null;
+  /** Id of a manager-placed extra station when one is selected (its kind is in `area`). */
+  placed: string | null;
+  editLayout: boolean;
   scenario: ScenarioState;
   mode: Mode;
   live: LiveState;
@@ -83,6 +86,8 @@ interface Store {
   setTab: (t: Tab) => void;
   setNav: (t: NavTab) => void;
   selectArea: (a: AreaId | null) => void;
+  selectPlaced: (id: string, kind: AreaId) => void;
+  setEditLayout: (on: boolean) => void;
   ask: (query: string) => void;
   editScenario: (spec: ScenarioSpec) => void;
   rephraseScenario: () => Promise<void>;
@@ -161,7 +166,7 @@ export const useTwin = create<Store>((set, get) => {
     const kitchen = replay(session.kitchen.createdAt, liveLog);
     advanceTo(kitchen, liveSeconds(session));
     set({ kitchen, live: { ...EMPTY_LIVE, session, members: membersFrom(liveLog), view: session.me.role === "manager" ? "kitchen" : "station" } });
-    commit({ tracedOrderId: null, previewStrategyId: null, area: null, tab: "inspect", scenario: EMPTY_SCENARIO });
+    commit({ tracedOrderId: null, previewStrategyId: null, area: null, placed: null, tab: "inspect", scenario: EMPTY_SCENARIO });
     unsubscribe = backend.subscribe(session, receive, (presence) => set({ live: { ...get().live, presence } }));
   };
 
@@ -184,7 +189,8 @@ export const useTwin = create<Store>((set, get) => {
     toast: null,
     tab: "inspect",
     nav: "kitchen",
-    area: null,
+    area: null, placed: null,
+    editLayout: false,
     scenario: EMPTY_SCENARIO,
     mode: "sim",
     live: EMPTY_LIVE,
@@ -257,11 +263,13 @@ export const useTwin = create<Store>((set, get) => {
     },
     reset: () => {
       if (isLive()) return;
-      set({ ...initial(), speed: 1, tracedOrderId: null, focusedNodeId: null, previewStrategyId: null, toast: null, tab: "inspect", area: null, scenario: EMPTY_SCENARIO });
+      set({ ...initial(), speed: 1, tracedOrderId: null, focusedNodeId: null, previewStrategyId: null, toast: null, tab: "inspect", area: null, placed: null, scenario: EMPTY_SCENARIO });
     },
     setTab: (tab) => set({ tab }),
     setNav: (nav) => set({ nav }),
-    selectArea: (area) => set(area ? { area, tab: "inspect", tracedOrderId: null } : { area }),
+    selectArea: (area) => set(area ? { area, placed: null, tab: "inspect", tracedOrderId: null } : { area, placed: null }),
+    selectPlaced: (placed, area) => set({ area, placed, tab: "inspect", tracedOrderId: null }),
+    setEditLayout: (editLayout) => set({ editLayout }),
     ask: (query) => {
       const spec = parseScenario(query);
       if (!spec) return set({ scenario: { ...EMPTY_SCENARIO, query, notUnderstood: true } });
@@ -291,7 +299,7 @@ export const useTwin = create<Store>((set, get) => {
     setMainView: (mainView) => set({ mainView }),
     setMode: (mode) => {
       if (mode === get().mode) return;
-      const reset = { tracedOrderId: null, previewStrategyId: null, area: null, tab: "inspect" as Tab, scenario: EMPTY_SCENARIO, toast: null };
+      const reset = { tracedOrderId: null, previewStrategyId: null, area: null, placed: null, tab: "inspect" as Tab, scenario: EMPTY_SCENARIO, toast: null };
       if (mode === "live") {
         simKitchen = get().kitchen;
         set({ mode, kitchen: createLiveKitchen(Date.now()), live: EMPTY_LIVE, ...reset });
@@ -318,7 +326,7 @@ export const useTwin = create<Store>((set, get) => {
       const session = get().live.session;
       if (session) await backend.leave(session);
       disconnect();
-      set({ kitchen: createLiveKitchen(Date.now()), live: EMPTY_LIVE, tracedOrderId: null, area: null });
+      set({ kitchen: createLiveKitchen(Date.now()), live: EMPTY_LIVE, tracedOrderId: null, area: null, placed: null });
       commit();
     },
     liveDo: async (action, as) => {

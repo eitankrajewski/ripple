@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { AlertTriangle, BookOpen, ChevronRight, History, LayoutGrid, ListOrdered, Package, Search, Users } from "lucide-react";
 import { useState } from "react";
 import { useAreas } from "../lib/areas";
+import { useStationNodes } from "../lib/stations";
 import { pct } from "../lib/ui";
 import { useCan, useTwin, type NavTab } from "../store";
 import { Dot, IconTabs, OrderRow, PantryRow, type IconTab } from "./kit";
@@ -11,8 +12,12 @@ import { PantryAdd } from "./PantryAdd";
 
 function KitchenTree({ filter }: { filter: string }) {
   const { areas } = useAreas();
-  const sel = useTwin((s) => s.area);
+  const areaSel = useTwin((s) => s.area);
+  const placedSel = useTwin((s) => s.placed);
+  const sel = placedSel ? null : areaSel;
   const selectArea = useTwin((s) => s.selectArea);
+  const selectPlaced = useTwin((s) => s.selectPlaced);
+  const extras = useStationNodes().filter((n) => n.placed);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const f = filter.toLowerCase();
   return (
@@ -26,6 +31,7 @@ function KitchenTree({ filter }: { filter: string }) {
         const orders = a.orders.filter((o) => !f || `${o.label} ${o.customer} ${o.itemsText}`.toLowerCase().includes(f));
         if (f && !orders.length && !a.name.toLowerCase().includes(f)) return null;
         const isOpen = open[a.id] ?? !!f;
+        const mine = extras.filter((n) => n.kind === a.id);
         return (
           <div key={a.id} className="pl-4">
             <div
@@ -55,6 +61,20 @@ function KitchenTree({ filter }: { filter: string }) {
                 ))}
               </div>
             )}
+            {mine.map((n) => {
+              const on = placedSel === n.id;
+              return (
+                <div
+                  key={n.id}
+                  onClick={() => (on ? selectArea(null) : selectPlaced(n.id, n.kind))}
+                  className={clsx("flex cursor-pointer items-center gap-1.5 rounded-[7px] py-1 pr-1 pl-6", on ? "bg-navy text-white" : "hover:bg-navy/[0.04]")}
+                >
+                  <span className={clsx("size-2 shrink-0 rounded-full bg-[#ff5f1f]", on && "ring-2 ring-white/80")} />
+                  <span className="flex-1 truncate font-bold">{n.name}</span>
+                  <span className={clsx("text-[11.5px] font-semibold", on ? "text-white/80" : "text-faint")}>added</span>
+                </div>
+              );
+            })}
           </div>
         );
       })}

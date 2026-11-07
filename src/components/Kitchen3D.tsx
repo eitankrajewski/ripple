@@ -11,6 +11,7 @@ import { haptic } from "../lib/haptics";
 import { useCan } from "../store";
 import { AREA_ORDER, culpritArea, useAreas, type Area, type AreaId } from "../lib/areas";
 import { pct, RISK_HEX } from "../lib/ui";
+import { KIND_LABEL, POS, useLayoutActions, useStationNodes, type StationNode } from "../lib/stations";
 import { useTwin } from "../store";
 
 const C = {
@@ -28,14 +29,6 @@ const C = {
   muted: "#bfc7d4",
 };
 
-const POS: Record<AreaId, [number, number]> = {
-  orders: [-7.4, 2.4],
-  pantry: [-7.4, -3.6],
-  prep: [-3, -0.8],
-  cook: [1.4, -3.6],
-  pack: [4.8, -0.6],
-  pickup: [8, 2.8],
-};
 const MARKER_Y: Record<AreaId, number> = { orders: 2.1, pantry: 3.1, prep: 1.8, cook: 3.7, pack: 1.9, pickup: 2.3 };
 const HOME = { pos: [3, 15, 17] as const, target: [0, 0, -0.4] as const };
 
@@ -282,28 +275,7 @@ function AreaNode({ a, node, selected, culprit, onSelect }: { a: Area; node: Nod
 
 type XZ = [number, number];
 
-/** Every station in the room: the six built-in ones (possibly moved) plus extras a manager placed. */
-interface Node3D {
-  id: string;
-  kind: StationKind;
-  x: number;
-  z: number;
-  rot: number;
-  placed: boolean;
-  n: number;
-}
-
-function useNodes(): Node3D[] {
-  const layout = useTwin((s) => s.state.layout);
-  const poses = useTwin((s) => s.state.basePoses);
-  return useMemo(
-    () => [
-      ...AREA_ORDER.map((id) => ({ id, kind: id, x: poses[id]?.x ?? POS[id][0], z: poses[id]?.z ?? POS[id][1], rot: poses[id]?.rot ?? 0, placed: false, n: 1 })),
-      ...layout.map((p) => ({ id: p.id, kind: p.kind, x: p.x, z: p.z, rot: p.rot ?? 0, placed: true, n: layout.filter((x) => x.kind === p.kind).indexOf(p) + 2 })),
-    ],
-    [layout, poses],
-  );
-}
+type Node3D = StationNode;
 
 function lane([ax, az]: XZ, [bx, bz]: XZ) {
   const a = new THREE.Vector3(ax, 0.03, az);
@@ -361,20 +333,30 @@ function Room() {
   );
 }
 
-const KIND_LABEL: Record<StationKind, string> = { orders: "Orders in", pantry: "Pantry", prep: "Prep", cook: "Cook", pack: "Pack", pickup: "Pickup" };
 const FLOOR = { x: [-10.2, 10.2], z: [-5.6, 5.6] } as const;
 const snap = (v: number, [lo, hi]: readonly [number, number]) => Math.min(hi, Math.max(lo, Math.round(v * 2) / 2));
 
-function PlacedNode({ node }: { node: Node3D }) {
+function PlacedNode({ node, selected, onSelect }: { node: Node3D; selected: boolean; onSelect: () => void }) {
   const Model = MODEL[node.kind];
   return (
     <group position={[node.x, 0, node.z]}>
-      <group rotation-y={node.rot}>
+      <group
+        rotation-y={node.rot}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect();
+        }}
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          document.body.style.cursor = "pointer";
+        }}
+        onPointerOut={() => (document.body.style.cursor = "")}
+      >
         <Model busy={false} />
       </group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
-        <ringGeometry args={[1.75, 1.82, 64]} />
-        <meshBasicMaterial color={C.wall} transparent opacity={0.7} depthWrite={false} />
+        <ringGeometry args={selected ? [1.7, 1.86, 64] : [1.75, 1.82, 64]} />
+        <meshBasicMaterial color={selected ? C.accent : C.wall} transparent opacity={selected ? 0.95 : 0.7} depthWrite={false} />
       </mesh>
     </group>
   );
@@ -436,7 +418,9 @@ function Scene({ controls, insets, ghost, nodes, hidden }: { controls: React.Ref
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const { areas } = useAreas();
   const area = useTwin((s) => s.area);
+  const placedSel = useTwin((s) => s.placed);
   const selectArea = useTwin((s) => s.selectArea);
+  const selectPlaced = useTwin((s) => s.selectPlaced);
   const paused = useTwin((s) => s.state.feedPaused);
   const speed = useTwin((s) => s.speed);
   const traced = useTwin((s) => s.state.orders.find((o) => o.id === s.tracedOrderId));
@@ -452,7 +436,7 @@ function Scene({ controls, insets, ghost, nodes, hidden }: { controls: React.Ref
     const c = controls.current;
     if (!c) return;
     if (area) {
-      const n = nodes.find((x) => x.id === area);
+      const n = nodes.find((x) => x.id === (placedSel ?? area));
       const [x, z] = n ? [n.x, n.z] : POS[area];
       void c.setLookAt(x + 4.2, 8, z + 10, x, 0.8, z, true);
     } else {
@@ -460,7 +444,7 @@ function Scene({ controls, insets, ghost, nodes, hidden }: { controls: React.Ref
     }
     // Only fly when the selection or viewport changes, not when a station is nudged.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [area, controls, size.width, size.height, insets]);
+  }, [area, placedSel, controls, size.width, size.height, insets]);
 
   useEffect(() => {
     const shift = (insets.right - insets.left) / 2;
@@ -497,12 +481,12 @@ function Scene({ controls, insets, ghost, nodes, hidden }: { controls: React.Ref
       {areas.map((a) => {
         const node = nodes.find((n) => n.id === a.id)!;
         if (hidden === a.id) return null;
-        return <AreaNode key={a.id} a={a} node={node} selected={area === a.id} culprit={culprit === a.id} onSelect={() => selectArea(area === a.id ? null : a.id)} />;
+        return <AreaNode key={a.id} a={a} node={node} selected={area === a.id && !placedSel} culprit={culprit === a.id} onSelect={() => selectArea(area === a.id && !placedSel ? null : a.id)} />;
       })}
       {nodes
         .filter((p) => p.placed && p.id !== hidden)
         .map((p) => (
-          <PlacedNode key={p.id} node={p} />
+          <PlacedNode key={p.id} node={p} selected={placedSel === p.id} onSelect={() => (placedSel === p.id ? selectArea(null) : selectPlaced(p.id, p.kind))} />
         ))}
       <Ghost at={ghost} />
     </>
@@ -546,10 +530,12 @@ interface EditTools {
   remove: (n: Node3D) => void;
 }
 
-function Markers({ nodes, register, edit }: { nodes: Node3D[]; register: (id: string, el: HTMLElement | null) => void; edit: EditTools | null }) {
+function Markers({ nodes, register, edit, editAll }: { nodes: Node3D[]; register: (id: string, el: HTMLElement | null) => void; edit: EditTools | null; editAll: boolean }) {
   const { areas } = useAreas();
   const area = useTwin((s) => s.area);
+  const placedSel = useTwin((s) => s.placed);
   const selectArea = useTwin((s) => s.selectArea);
+  const selectPlaced = useTwin((s) => s.selectPlaced);
   const traced = useTwin((s) => s.state.orders.find((o) => o.id === s.tracedOrderId));
   const traceEnd = traced ? AREA_ORDER.indexOf(culpritArea(traced) ?? "pickup") : -1;
   const dragOver = useDrag((s) => s.over);
@@ -559,9 +545,9 @@ function Markers({ nodes, register, edit }: { nodes: Node3D[]; register: (id: st
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
       {nodes.map((n) => {
         const a = byId[n.kind];
-        const selected = area === a.id && !n.placed;
+        const selected = n.placed ? placedSel === n.id : area === a.id && !placedSel;
         const dim = !!traced && AREA_ORDER.indexOf(a.id) > traceEnd;
-        const onSelect = () => selectArea(area === a.id ? null : a.id);
+        const onSelect = () => (selected ? selectArea(null) : n.placed ? selectPlaced(n.id, n.kind) : selectArea(a.id));
         const drop = DROP_OF[a.id];
         return (
           <div key={n.id} ref={(el) => register(n.id, el)} className="pointer-events-auto absolute top-0 left-0 flex items-center gap-1 will-change-transform" style={{ visibility: "hidden" }}>
@@ -577,16 +563,16 @@ function Markers({ nodes, register, edit }: { nodes: Node3D[]; register: (id: st
               )}
             >
               <span className={clsx("size-2 rounded-full", a.risk === "critical" && !selected && "pulse-dot")} style={{ background: selected ? "#fff" : n.placed ? C.wall : RISK_HEX[a.risk] }} />
-              {n.placed ? `${KIND_LABEL[n.kind]} ${n.n}` : a.name}
+              {n.placed ? n.name : a.name}
               <span className={clsx("font-semibold tabular-nums", selected ? "text-white/80" : "text-mute")}>{markerMetric(a)}</span>
               {a.changed && !selected && !n.placed && <span className="rounded-full bg-ai/12 px-1.5 text-[10px] font-extrabold text-ai">plan</span>}
             </button>
-            {edit && (
+            {edit && (editAll || selected) && (
               <span className="flex items-center gap-0.5 rounded-full bg-white/95 p-0.5 shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_14px_-6px_rgba(16,24,40,0.3)]">
-                <button onPointerDown={edit.move(n)} className="flex size-6 touch-none items-center justify-center rounded-full text-mute hover:bg-navy/8 hover:text-ink" style={{ cursor: "grab" }} title="Drag to move" aria-label={`Move ${a.name}`}>
+                <button onPointerDown={edit.move(n)} className="flex size-6 touch-none items-center justify-center rounded-full text-mute hover:bg-navy/8 hover:text-ink" style={{ cursor: "grab" }} title="Drag to move" aria-label={`Move ${n.name}`}>
                   <Move className="size-3.5" />
                 </button>
-                <button onClick={() => edit.rotate(n)} className="flex size-6 items-center justify-center rounded-full text-mute hover:bg-navy/8 hover:text-ink" title="Rotate 45°" aria-label={`Rotate ${a.name}`}>
+                <button onClick={() => edit.rotate(n)} className="flex size-6 items-center justify-center rounded-full text-mute hover:bg-navy/8 hover:text-ink" title="Rotate 45°" aria-label={`Rotate ${n.name}`}>
                   <RotateCw className="size-3.5" />
                 </button>
                 {n.placed && (
@@ -621,11 +607,14 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
   const selectArea = useTwin((s) => s.selectArea);
   const act = useTwin((s) => s.act);
   const canEdit = useCan("manage_layout");
-  const [palette, setPalette] = useState(false);
+  const palette = useTwin((s) => s.editLayout);
+  const setPalette = useTwin((s) => s.setEditLayout);
+  const placedSel = useTwin((s) => s.placed);
+  const layoutActions = useLayoutActions();
   const [carry, setCarry] = useState<{ kind: StationKind; x: number; y: number; moving: boolean } | null>(null);
   const [ghost, setGhost] = useState<GhostAt | null>(null);
   const [hidden, setHidden] = useState<string | null>(null);
-  const nodes = useNodes();
+  const nodes = useStationNodes();
   const nodesRef = useRef(nodes);
   useEffect(() => {
     nodesRef.current = nodes;
@@ -689,20 +678,15 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
   const pick = (kind: StationKind) => (e: React.PointerEvent) =>
     carryStation(e, kind, 0, null, (x, z) => void act({ type: "station_added", station: { id: uid(10), kind, x, z, rot: 0 } }));
   const edit: EditTools | null =
-    canEdit && palette
+    canEdit
       ? {
           move: (n) => (e) => carryStation(e, n.kind, n.rot, n, (x, z) => void act({ type: "station_moved", id: n.id, x, z, rot: n.rot })),
-          rotate: (n) => {
-            haptic("tick");
-            void act({ type: "station_moved", id: n.id, x: n.x, z: n.z, rot: (n.rot + Math.PI / 4) % (Math.PI * 2) });
-          },
-          remove: (n) => {
-            haptic("tick");
-            void act({ type: "station_removed", id: n.id });
-          },
+          rotate: (n) => layoutActions.rotate(n),
+          remove: (n) => layoutActions.remove(n),
         }
       : null;
-  const name = useAreas().areas.find((a) => a.id === area)?.name ?? "Whole kitchen";
+  const { areas } = useAreas();
+  const name = (placedSel && nodes.find((n) => n.id === placedSel)?.name) || (areas.find((a) => a.id === area)?.name ?? "Whole kitchen");
   const step = (d: number) => {
     const i = area ? AREA_ORDER.indexOf(area) : d > 0 ? -1 : AREA_ORDER.length;
     selectArea(AREA_ORDER[(i + d + AREA_ORDER.length) % AREA_ORDER.length]);
@@ -730,14 +714,14 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
           <CameraGrab onCamera={grabCamera} />
           <MarkerTracker nodes={nodesRef} place={place} />
         </Canvas>
-        <Markers nodes={nodes} register={register} edit={edit} />
+        <Markers nodes={nodes} register={register} edit={edit} editAll={palette} />
       </GLBoundary>
       {canEdit && palette && (
         <div ref={paletteRef} data-palette className="sidebar absolute bottom-20 left-1/2 w-[min(92%,560px)] -translate-x-1/2 rounded-[14px]! p-3 lg:bottom-[74px]">
           <div className="mb-2 flex items-start gap-2 text-[12.5px] font-extrabold">
             <div className="min-w-0">
               Edit layout
-              <div className="text-[11.5px] font-semibold text-mute">Drag a new station onto the floor. Use the handles on any station to move or rotate it.</div>
+              <div className="text-[11.5px] font-semibold text-mute">Drag a new station onto the floor. Use the handles on any station, new or original, to move or rotate it.</div>
             </div>
             <button className="tbtn ml-auto size-6!" onClick={() => setPalette(false)} aria-label="Close">
               <X className="size-3.5" />

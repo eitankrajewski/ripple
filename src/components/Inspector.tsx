@@ -1,9 +1,10 @@
 import clsx from "clsx";
-import { ChevronLeft, ChevronRight, GitCompareArrows, Info, Sparkles, X, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, GitCompareArrows, Info, Move, RotateCcw, RotateCw, Sparkles, Trash2, X, Zap } from "lucide-react";
 import type { OrderView, StationId } from "../engine/types";
 import { AREA_ORDER, culpritArea, useAreas, type Area } from "../lib/areas";
 import { minutes, pct, SOURCE, statusLabel } from "../lib/ui";
-import { useTwin, type Tab } from "../store";
+import { degrees, useLayoutActions, useStationNodes, type StationNode } from "../lib/stations";
+import { useCan, useTwin, type Tab } from "../store";
 import { AskTab } from "./AskTab";
 import { PantryAdd } from "./PantryAdd";
 import { StationFix } from "./StationFix";
@@ -19,7 +20,49 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
   );
 }
 
+function Placement({ n }: { n: StationNode }) {
+  const { rotate, remove } = useLayoutActions();
+  const editing = useTwin((s) => s.editLayout);
+  const setEditing = useTwin((s) => s.setEditLayout);
+  return (
+    <Section title="Placement">
+      <div className="card space-y-2.5 p-3">
+        <div className="flex items-center gap-2">
+          <span className="text-mute">Facing</span>
+          <span className="font-bold tabular-nums">{degrees(n.rot)}°</span>
+          <div className="ml-auto flex gap-1.5">
+            <button className="btn size-8! px-0!" onClick={() => rotate(n, -1)} title="Rotate left 45°" aria-label={`Rotate ${n.name} left`}>
+              <RotateCcw className="size-4" />
+            </button>
+            <button className="btn size-8! px-0!" onClick={() => rotate(n, 1)} title="Rotate right 45°" aria-label={`Rotate ${n.name} right`}>
+              <RotateCw className="size-4" />
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-1.5">
+          <button className={clsx("btn flex-1", editing && "bg-navy! text-white!")} onClick={() => setEditing(!editing)}>
+            <Move className="size-3.5" />
+            {editing ? "Done editing layout" : "Move on the floor"}
+          </button>
+          {n.placed && (
+            <button className="btn text-crit" onClick={() => remove(n)}>
+              <Trash2 className="size-3.5" />
+              Remove
+            </button>
+          )}
+        </div>
+        <p className="text-[12px] text-mute">{editing ? "Drag the move handle on any station label in the 3D view." : "Opens the layout editor so you can drag stations around."}</p>
+      </div>
+    </Section>
+  );
+}
+
 function AreaInspector({ a }: { a: Area }) {
+  const placedId = useTwin((s) => s.placed);
+  const nodes = useStationNodes();
+  const node = nodes.find((n) => n.id === (placedId ?? a.id));
+  const extra = node?.placed ? node : null;
+  const canLayout = useCan("manage_layout");
   const selectArea = useTwin((s) => s.selectArea);
   const sendRush = useTwin((s) => s.sendRush);
   const inventory = useTwin((s) => s.state.inventory);
@@ -34,7 +77,7 @@ function AreaInspector({ a }: { a: Area }) {
     <div className="space-y-4">
       <div>
         <div className="flex items-center justify-between">
-          <h3 className="text-[17px] font-extrabold">{a.name}</h3>
+          <h3 className="text-[17px] font-extrabold">{extra ? extra.name : a.name}</h3>
           <div className="flex">
             <button className="tbtn h-6! min-w-6!" onClick={() => go(-1)} aria-label="Previous area">
               <ChevronLeft className="size-4" />
@@ -44,7 +87,7 @@ function AreaInspector({ a }: { a: Area }) {
             </button>
           </div>
         </div>
-        <p className="text-mute">{a.role}</p>
+        <p className="text-mute">{extra ? (["prep", "cook", "pack"].includes(a.id) ? `Added ${a.name} station. It adds one person of capacity and shares the ${a.name} queue.` : `Added ${a.name} area, part of the same step in the workflow.`) : a.role}</p>
         <div className="mt-2 flex items-center gap-2">
           <RiskChip risk={a.risk} />
           {a.changed && <span className="rounded-full bg-ai/10 px-2 py-0.5 text-[11.5px] font-bold text-ai">Changed by preview</span>}
@@ -52,8 +95,10 @@ function AreaInspector({ a }: { a: Area }) {
         </div>
       </div>
 
+      {canLayout && node && <Placement n={node} />}
+
       {a.load !== undefined && (
-        <Section title="Capacity">
+        <Section title={extra ? `${a.name} capacity (all stations)` : "Capacity"}>
           <div className="card p-3">
             <div className="mb-1.5 flex items-baseline justify-between">
               <span className="text-[24px] leading-none font-extrabold tabular-nums">{pct(a.load)}</span>
@@ -196,6 +241,8 @@ function OrderInspector({ o }: { o: OrderView }) {
 function NoSelection() {
   const { areas } = useAreas();
   const selectArea = useTwin((s) => s.selectArea);
+  const selectPlaced = useTwin((s) => s.selectPlaced);
+  const extras = useStationNodes().filter((n) => n.placed);
   return (
     <div className="flex flex-col items-center pt-16 text-center">
       <p className="text-[15px] font-bold text-faint">No Selection</p>
@@ -206,6 +253,13 @@ function NoSelection() {
             <Dot risk={a.risk} />
             <span className="font-bold">{a.name}</span>
             <span className="ml-auto truncate text-faint">{a.summary}</span>
+          </button>
+        ))}
+        {extras.map((n) => (
+          <button key={n.id} onClick={() => selectPlaced(n.id, n.kind)} className="flex w-full items-center gap-2 rounded-[7px] px-2 py-1.5 hover:bg-navy/[0.04]">
+            <span className="size-2 rounded-full bg-[#ff5f1f]" />
+            <span className="font-bold">{n.name}</span>
+            <span className="ml-auto truncate text-faint">added station</span>
           </button>
         ))}
       </div>
