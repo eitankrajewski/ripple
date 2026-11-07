@@ -1,0 +1,37 @@
+{
+ "two-column.jpg": {
+  "Classic Cheeseburger": 13,
+  "Bacon BBQ Burger": 15.5,
+  "Mushroom Swiss Burger": 14,
+  "Chicken Caesar Salad": 12,
+  "Greek Salad": 11,
+  "Teriyaki Chicken Bowl": 13.75
+ },
+ "caps-price-below.jpg": {
+  "Chicken Tinga Tacos": 10.95,
+  "Carne Asada Burrito": 12.5,
+  "Veggie Quesadilla": 9.25,
+  "Chips & Guacamole": 6
+ },
+ "wide-prices.jpg": {
+  "Grilled Chicken Sandwich": 11,
+  "Spicy Chicken Wrap": 10.5,
+  "Double Smash Burger": 14,
+  "Black Bean Veggie Burger": 12,
+  "Tomato Soup": 6.5,
+  "Seasoned Fries": 4.25
+ },
+ "chalkboard.jpg": {
+  "Fried Chicken Sliders": 9,
+  "Philly Cheesesteak": 14,
+  "Garden Salad": 8,
+  "Onion Rings": 5
+ },
+ "numbered.jpg": {
+  "Buffalo Wings": 11.99,
+  "Loaded Nachos": 10.49,
+  "Turkey Club": 12.99,
+  "Chicken Parm Sub": 13.49,
+  "Veggie Melt": 11.49
+ }
+}

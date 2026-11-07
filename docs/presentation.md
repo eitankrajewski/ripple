@@ -109,7 +109,7 @@ sequenceDiagram
 - **Handoff check:** a Dasher name and 3-letter code match is required; a mismatch is logged.
 - **Manager Board:** drag-and-drop any order to any station (forward or back).
 - **Station layout editor:** drag preset stations onto the 3D floor; extra stations add capacity. Placement snaps and avoids overlap.
-- **Menu scanning:** Tesseract.js OCR runs in the browser, a parser turns lines into draft dishes (price, likely ingredients, station times), and the manager reviews them before saving.
+- **Menu scanning:** the photo is cleaned on a canvas (orientation, rescale, grayscale, lighting flattened, contrast stretched, light-on-dark inverted), then read in the browser by Tesseract.js (an LSTM OCR model in WebAssembly; no MediaPipe, nothing uploaded). Up to three layout passes run and the best is kept; word positions rebuild rows and columns so prices stay with their dish, and a parser handles prices on the next line, dot leaders, descriptions and headings. The manager reviews every draft, plus the raw text, before saving. `scripts/menu-fixtures/` holds hard test photos and a scorer.
 
 **Real-time and security**
 - **Multi-device sync:** Supabase Realtime (Postgres changes + presence) delivers events in well under a second.
@@ -139,7 +139,7 @@ sequenceDiagram
 | Animation / gestures | Framer Motion |
 | Icons | Lucide |
 | State | Zustand |
-| OCR | Tesseract.js (WebAssembly, runs in the browser) |
+| OCR | Tesseract.js (LSTM model in WebAssembly, runs in the browser) + Canvas image preprocessing |
 | Backend / database | Supabase: PostgreSQL, Row-Level Security, Realtime, Anonymous Auth |
 | Serverless API | Vercel Functions (Node.js): DoorDash webhook, Gemini explain route |
 | AI (optional) | Google Gemini API (wording only) |

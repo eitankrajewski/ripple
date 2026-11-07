@@ -5,7 +5,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { StationId } from "../engine/types";
 import { haptic } from "../lib/haptics";
-import { guessIngredients, guessMinutes, ocrImage, parseMenuText, slug, type MenuDraft } from "../lib/menuScan";
+import { guessIngredients, guessMinutes, parseMenuText, scanMenu, slug, type MenuDraft, type ScanResult } from "../lib/menuScan";
 import { useTwin } from "../store";
 
 const STATIONS: StationId[] = ["prep", "cook", "pack"];
@@ -21,6 +21,7 @@ function DraftEditor({ d, onChange }: { d: MenuDraft; onChange: (d: MenuDraft) =
         <input className="field min-w-0 flex-1 font-bold" value={d.name} onChange={(e) => onChange({ ...d, name: e.target.value })} />
         {d.price !== undefined && <span className="shrink-0 font-bold text-mute tabular-nums">${d.price.toFixed(2)}</span>}
       </div>
+      {d.description && <p className="mt-1 truncate pl-8 text-[11.5px] text-mute">{d.description}</p>}
       <div className="mt-2 flex flex-wrap gap-1">
         {ingredients.map((i) => {
           const on = !!d.ingredients[i.id];
@@ -58,24 +59,26 @@ function MenuSheet({ mode, onClose }: { mode: "add" | "scan"; onClose: () => voi
   const act = useTwin((s) => s.act);
   const blank = (): MenuDraft => ({ id: "", name: "", ingredients: {}, minutes: { prep: 1.2, cook: 2, pack: 0.4 }, keep: true });
   const [drafts, setDrafts] = useState<MenuDraft[]>(mode === "add" ? [blank()] : []);
-  const [progress, setProgress] = useState<number | null>(null);
+  const [progress, setProgress] = useState<{ p: number; step: string } | null>(null);
+  const [read, setRead] = useState<Omit<ScanResult, "drafts"> | null>(null);
   const [error, setError] = useState("");
   const [text, setText] = useState("");
   const existing = cfg.menu.map((m) => m.id);
 
-  const fromText = (t: string) => {
-    const found = parseMenuText(t, cfg.ingredients, existing);
+  const show = (found: MenuDraft[]) => {
     setDrafts(found);
     setError(found.length ? "" : "No menu items found. Try a straighter, closer photo, or paste the text below.");
   };
+  const fromText = (t: string) => show(parseMenuText(t, cfg.ingredients, existing));
   const scan = async (file?: File) => {
     if (!file) return;
     setError("");
-    setProgress(0);
+    setProgress({ p: 0, step: "Preparing photo" });
     try {
-      const t = await ocrImage(file, setProgress);
-      setText(t);
-      fromText(t);
+      const { drafts: found, ...info } = await scanMenu(file, cfg.ingredients, existing, (p, step) => setProgress({ p, step }));
+      setRead(info);
+      setText(info.text);
+      show(found);
     } catch {
       setError("Couldn't read that image. Check your connection (the text reader downloads once) or paste the menu text instead.");
     } finally {
@@ -121,7 +124,9 @@ function MenuSheet({ mode, onClose }: { mode: "add" | "scan"; onClose: () => voi
                 {progress !== null ? (
                   <>
                     <Loader2 className="size-5 animate-spin text-navy" />
-                    <span className="font-bold">Reading menu… {Math.round(progress * 100)}%</span>
+                    <span className="font-bold">
+                      {progress.step}… {Math.round(progress.p * 100)}%
+                    </span>
                   </>
                 ) : (
                   <>
@@ -133,7 +138,10 @@ function MenuSheet({ mode, onClose }: { mode: "add" | "scan"; onClose: () => voi
                 <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void scan(e.target.files?.[0])} />
               </label>
               <details className="rounded-[10px] bg-white/70 px-3 py-2">
-                <summary className="cursor-pointer font-bold text-mute">Or paste menu text</summary>
+                <summary className="cursor-pointer font-bold text-mute">
+                  {read ? `What the scanner read · ${read.confidence}% confidence · ${read.pass}` : "Or paste menu text"}
+                </summary>
+                {read && <p className="mt-1 text-[11.5px] text-mute">Fix any misread words here and press Find items again.</p>}
                 <textarea className="field mt-2 h-28! w-full py-2" value={text} onChange={(e) => setText(e.target.value)} placeholder={"Chicken Caesar Wrap  $11.50\nDouble Cheeseburger  $13.00"} />
                 <button className="btn mt-2" onClick={() => fromText(text)}>
                   Find items
