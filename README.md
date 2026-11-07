@@ -12,11 +12,14 @@ order → ingredients → Prep / Cook / Pack → order ready → pickup on time 
 
 When something goes wrong, such as a rush, a shortage or a station above 100%, RIPPLE shows how it spreads through the kitchen, compares responses side by side, and lets the manager approve one. Staff on phones and tablets work the same live kitchen from their own stations.
 
-![RIPPLE screenshot](docs/screenshot.png)
+![RIPPLE 3D kitchen map](docs/kitchen-3d.png)
 
 ## Features
 
 ### 3D kitchen
+
+![RIPPLE with the Kitchen navigator and Inspector](docs/screenshot.png)
+
 - **Interactive 3D model** of the kitchen (Orders in → Pantry → Prep → Cook → Pack → Pickup), built with Three.js and React Three Fiber. Orbit, zoom, and tap a station to fly to it and open its status.
 - **Status at a glance:** rings appear only where something is wrong, and tracing an order lights up its path through the stations.
 - **Custom layouts (manager only):** drag extra stations from a palette onto the floor, then move and rotate any station, original or new. New stations join the workflow, add capacity to their station type, and appear in the Kitchen tab as items you can select on their own (e.g. *Prep 2*).
