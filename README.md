@@ -2,101 +2,106 @@
 
 > See the ripple effect. Compare your options. Then act.
 
-RIPPLE is a simplified digital twin of a restaurant kitchen. A simulated order feed drives a deterministic model of inventory, prep tasks, stations and pickup promises. When a rush order lands, the **Ripple Map** shows how it spreads (event → ingredient → task → station → order → pickup outcome) and the **Decision Sandbox** compares response strategies side by side before the manager approves one.
+**Live app:** <https://ripple-inky-tau.vercel.app>
+
+RIPPLE is a real-time digital twin of a restaurant kitchen. Every order, check-off and stock count goes into a shared event log, and a deterministic engine on each device replays that log into a 3D model of the kitchen:
+
+```
+order → ingredients → Prep / Cook / Pack → order ready → pickup on time (or late)
+```
+
+When something goes wrong, such as a rush, a shortage or a station above 100%, RIPPLE shows how it spreads through the kitchen, compares responses side by side, and lets the manager approve one. Staff on phones and tablets work the same live kitchen from their own stations.
 
 ![RIPPLE screenshot](docs/screenshot.png)
 
-All outcomes are **simulated projections**. The order feed is simulated; there is no live DoorDash or POS connection.
+## Features
 
-## What's in the demo
+### 3D kitchen
+- **Interactive 3D model** of the kitchen (Orders in → Pantry → Prep → Cook → Pack → Pickup), built with Three.js and React Three Fiber. Orbit, zoom, and tap a station to fly to it and open its status.
+- **Status at a glance:** rings appear only where something is wrong, and tracing an order lights up its path through the stations.
+- **Custom layouts (manager only):** drag extra stations from a palette onto the floor, then move and rotate any station, original or new. New stations join the workflow, add capacity to their station type, and appear in the Kitchen tab as items you can select on their own (e.g. *Prep 2*).
 
-- **3D kitchen** (centerpiece): a simple, light Three.js model of the kitchen (Orders in → Pantry → Prep → Cook → Pack → Pickup) built with React Three Fiber. Drag to orbit, scroll or pinch to zoom, and click a station (or its label) to fly to it and open its status in the Inspector. Rings appear only where something is wrong; tracing an order highlights its path. Needs WebGL; without it the navigator and inspector still work.
-- **Xcode-style layout**: slim toolbar (reset, play/pause, status, speed, rush), a left navigator (Kitchen tree, Orders, Pantry, Issues, Activity) and a right inspector (Inspector, Plan, Ask AI). Both side panels can be hidden from the toolbar.
-- **Seeded scenario**: five healthy orders, background orders every 5–8 s, and a guaranteed heavy chicken rush at ~40 s that causes a chicken shortage, Prep above 100% and several late orders.
-- **Plan**: *Protect Pickup Times*, *Reduce Kitchen Overload* and *Minimize Waste*, each with deterministic metrics vs. "no change" and a trade-off. Selecting one previews it in the 3D kitchen; nothing is applied until you approve.
-- **Ask AI (what-ifs)**: type a question such as "What should we do if 20 customers suddenly walk in?" or "A cook calls out sick". A keyword parser turns it into a scenario you can adjust, the twin plays it out on a copy of the kitchen and ranks responses (strategies, adding staff, emergency restock). You can then play it on the live twin.
-- **Orders**: list with filters (All / At risk / Held), release or cancel held orders, plus an activity log and an Issues list.
-- **Pantry**: on hand vs. needed, tap a number to recount stock.
-- **Controls**: play / pause, 1×/2×/4× speed, *Rush order*, and *Reset* to the exact initial seed.
-- **AI wording**: optional Gemini rephrasing of the deterministic explanations. Gemini never calculates anything; without a key the deterministic text is used.
+### Live kitchen
+- **Join with a code:** the manager opens a kitchen and gets a 6-character code. Staff join from any phone, tablet or laptop with a role (Prep, Line cook, Expo / Pack, Host). No accounts needed.
+- **Station screens:** each role sees only its tickets, with large touch targets and swipe right to send a ticket on.
+- **Item-level check-offs:** finished parts of an order move ahead on their own. Pack waits until every part has arrived.
+- **Do together:** tickets at a station that share a component (e.g. chicken) are grouped so the line makes it once.
+- **Manager Board:** drag any order to any station, forward or back, or drop it onto a 3D station. Android phones vibrate on pick-up and drop.
+- **Roles enforced twice:** in the app and by row-level security in the database.
 
-## Live mode (preview)
+### DoorDash orders
+- **Order intake:** a signed webhook (`POST /api/doordash`) drops orders into the live kitchen with the Dasher's name and ETA. Repeated deliveries are ignored.
+- **Fire times:** every ticket gets a start time so it's ready as the Dasher arrives. Prep sees *Start now* / *Start in 12m*, and a late or early Dasher re-times the queue on every device.
+- **Pack checklist and handoff check:** *Packed* unlocks only when every item is ticked, and Expo confirms the Dasher's name and code before handing the bag over.
+- **Test orders:** a DoorDash button sends realistic orders for demos.
 
-Switch the toolbar from **Simulation** to **Live** to run the real kitchen:
+### Planning and what-ifs
+- **Status bar:** one line for kitchen health. Click it for a short list of issues, each with a plain action.
+- **Over capacity:** when a station goes above 100%, RIPPLE suggests moving a person from the least busy station, holding the order with the latest pickup, or cancelling an order with a ready-to-send customer message.
+- **Plans:** *Protect Pickup Times*, *Reduce Kitchen Overload* and *Minimize Waste* are each simulated on a copy of the kitchen and compared against "no change". Nothing changes until the manager approves.
+- **Ask:** type a what-if such as "20 customers just walked in" or "a cook called out sick". The engine plays it out on a copy of the kitchen and ranks the responses.
 
-- The **manager** opens a kitchen and gets a 6-character join code.
-- **Other devices** (Prep, Line cook, Expo / Pack, Host) join with the code and a role.
-- Station devices get a focused ticket screen. Tapping **Prep done → Cook** moves the order to the next stage on every screen.
-- The host and manager enter orders with **New order**.
+### Menu and pantry
+- **Menu scanning:** photograph a menu and RIPPLE reads it on the device (Tesseract.js OCR with image cleanup and layout reconstruction), then turns each line into a draft dish with its price and station times.
+- **Suggested ingredients:** each dish gets likely ingredients, including ones not in the pantry yet. Saving creates the dish and any new pantry ingredients together. The manager reviews everything before it's saved.
+- **Pantry:** stock on hand against what open orders need, one-tap recounts, and shortage warnings before the line runs out.
+- **Add and remove:** managers add or remove dishes and ingredients; changes sync to every device.
 
-- **Prep fire queue:** the prep screen sorts tickets into **Start now** and **Start later**, using each order's fire time (timed so it's ready as the Dasher arrives).
-- **Pack and handoff:** Expo ticks items into the bag and checks the Dasher's name and code at handoff.
-- **Board:** managers drag any ticket to any station from the Board, or from the navigator onto a 3D station label. Android phones vibrate on pick-up and drop.
-- **DoorDash:** orders arrive through `POST /api/doordash` (signed webhooks) or the **DoorDash** test-order button.
-- **Phones and tablets:** works in a phone or tablet browser, with a bottom tab bar and swipe-right to complete a ticket.
+### Simulation mode
+- A seeded scenario with a guaranteed rush and chicken shortage, for demos and training. Play, pause, 1×/2×/4× speed, *Rush order*, and *Reset* back to the exact same starting point.
 
-With Supabase configured (`.env.example`), devices anywhere can join. Without it, kitchens stay in this browser (try two tabs). The setup, roles, data model and webhook format are in [`docs/live-mode.md`](docs/live-mode.md). The hackathon pitch and the happy- and sad-path demo script are in [`docs/demo-script.md`](docs/demo-script.md).
+Press **?** in the app for an explanation of every number and how to get around.
 
-Press **?** in the toolbar for an explanation of every number and how to get around.
+## How it works
+
+![How RIPPLE works](docs/diagrams/flow.png)
+
+1. **Orders in:** DoorDash webhooks, the in-app *New order* form, or the simulated feed.
+2. **Shared event log:** every action is an append-only event in Supabase Postgres, protected by row-level security and pushed to every device with Supabase Realtime.
+3. **Deterministic engine:** each device replays the events to rebuild the kitchen, traces each order to its ingredients and stations, and projects ready times, fire times and risk. The same events always give the same results.
+4. **Detect and decide:** overloads, shortages and late pickups trigger ranked plans that the manager can approve.
+5. **Screens:** the 3D twin and station screens update, and staff actions become new events.
+
+More detail: [`docs/presentation.md`](docs/presentation.md) (technical features and diagrams), [`docs/features.md`](docs/features.md) (features mapped to merchant pain points), [`docs/live-mode.md`](docs/live-mode.md) (roles, data model, webhook format) and [`docs/demo-script.md`](docs/demo-script.md) (demo walkthrough).
+
+## Tech stack
+
+- **Languages:** TypeScript / TSX, SQL (PostgreSQL), CSS
+- **Frontend:** React 19, Vite 8, Tailwind CSS 4, Framer Motion, Zustand, Lucide icons
+- **3D:** Three.js, React Three Fiber, Drei
+- **OCR:** Tesseract.js (WebAssembly, runs in the browser)
+- **Backend:** Supabase (PostgreSQL, row-level security, Realtime, anonymous auth)
+- **Hosting:** Vercel (static site and serverless functions on Node.js 22)
+- **Tooling:** Vitest, oxlint, TypeScript, GitHub
 
 ## Run locally
 
-Requires Node.js 22.12+ (or 20.19+).
+Requires Node.js 22.12+.
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # deterministic engine tests
+npm test           # engine and live-mode tests
 npm run build      # type-check + production build into dist/
 ```
 
-Optional AI wording: create `.env.local` with `GEMINI_API_KEY=...` (never commit it). Without a key, the app uses the deterministic text.
+The local app connects to the same Supabase project as the live site, so live kitchens work across devices out of the box. To try it from a phone, open the address Vite prints under "Network" on the same Wi-Fi.
 
 ## Project layout
 
 ```
-src/engine/      seed data, simulation (ingestEvent, tick, project), strategies, what-if scenarios, tests
-src/components/  Kitchen3D (Three.js scene), Toolbar + AlertBar, Navigator, Inspector, Plan / Ask AI tabs, HelpSheet, shared kit
-src/components/live/  sign-in (LiveGate), StationScreen, NewOrderForm, TeamPanel
-src/live/        roles & permissions, live event types, event replay, LiveBackend (local + Supabase)
-supabase/        config + SQL migration (tables, RLS, join functions, realtime)
-api/doordash.ts  signed DoorDash-style order webhook → live kitchen (mapping in api/_doordash.ts)
-src/lib/areas.ts  derives per-area status shared by the 3D scene and the inspector
-src/store.ts  zustand store wiring the engine to the UI
-api/explain.ts   Vercel serverless function for optional Gemini wording
-server/       dev-server middleware that mirrors /api/explain locally
+src/engine/           seed data, simulation (ingestEvent, tick, project), strategies, what-if scenarios
+src/components/       Kitchen3D (Three.js scene), Toolbar, Navigator, Inspector, Plan / Ask tabs, Menu and Pantry panels
+src/components/live/  sign-in, station screens, Board, New order form, DoorDash panel, team panel
+src/live/             roles and permissions, live event types, event replay, Supabase backend
+src/lib/              station layout, 3D area status, menu scanning (OCR + parsing), haptics
+src/store.ts          Zustand store wiring the engine to the UI
+supabase/migrations/  tables, row-level security, join functions, realtime
+api/                  Vercel functions: DoorDash webhook and explanation wording
 ```
 
-`ingestEvent()` in `src/engine/engine.ts` is the single entry point for orders, rush orders and stock corrections, which is where a real POS or DoorDash webhook would plug in later.
+`ingestEvent()` in `src/engine/engine.ts` is the single entry point every event goes through, whether it comes from a device, a webhook or the simulation.
 
-## Connect to GitHub
+## Deployment
 
-1. Create an empty repository on GitHub (no README/.gitignore), e.g. `ripple-kitchen-twin`.
-2. From this folder:
-
-   ```bash
-   git remote add origin https://github.com/<your-username>/ripple-kitchen-twin.git
-   git branch -M main
-   git push -u origin main
-   ```
-
-   Or with the GitHub CLI: `gh repo create ripple-kitchen-twin --public --source=. --push`
-
-## Publish
-
-### Option A: Vercel (recommended, supports the optional AI route)
-
-1. Go to <https://vercel.com/new> and import the GitHub repository.
-2. Vercel detects Vite automatically (build `npm run build`, output `dist`). Click **Deploy**.
-3. Optional: in *Project → Settings → Environment Variables*, add `GEMINI_API_KEY`, then redeploy.
-
-Every push to `main` redeploys automatically, and pull requests get preview URLs.
-
-### Option B: GitHub Pages (static only, no AI route)
-
-This repo includes `.github/workflows/deploy-pages.yml`.
-
-1. On GitHub: *Settings → Pages → Build and deployment → Source: **GitHub Actions***.
-2. Push to `main`. The workflow builds and publishes to `https://<your-username>.github.io/<repo-name>/`.
-
-"Rephrase with AI" falls back to deterministic text on Pages, since there is no server.
+The `main` branch deploys to Vercel automatically on every push, and pull requests get preview URLs. Database changes live in `supabase/migrations/`.
