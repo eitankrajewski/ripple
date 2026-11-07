@@ -1,11 +1,12 @@
 import clsx from "clsx";
-import { AlertTriangle, ChevronRight, History, LayoutGrid, ListOrdered, Package, Search, Users } from "lucide-react";
+import { AlertTriangle, BookOpen, ChevronRight, History, LayoutGrid, ListOrdered, Package, Search, Users } from "lucide-react";
 import { useState } from "react";
 import { useAreas } from "../lib/areas";
 import { pct } from "../lib/ui";
-import { useTwin, type NavTab } from "../store";
+import { useCan, useTwin, type NavTab } from "../store";
 import { Dot, IconTabs, OrderRow, PantryRow, type IconTab } from "./kit";
 import { TeamPanel } from "./live/TeamPanel";
+import { MenuPanel } from "./MenuPanel";
 
 function KitchenTree({ filter }: { filter: string }) {
   const { areas } = useAreas();
@@ -155,7 +156,7 @@ function Pantry() {
   );
 }
 
-const TITLES: Record<NavTab, string> = { kitchen: "Kitchen", orders: "Orders", pantry: "Pantry", issues: "Issues", activity: "Activity", team: "Team & devices" };
+const TITLES: Record<NavTab, string> = { kitchen: "Kitchen", orders: "Orders", pantry: "Pantry", menu: "Menu", issues: "Issues", activity: "Activity", team: "Team & devices" };
 
 export function Navigator({ className }: { className?: string }) {
   const nav = useTwin((s) => s.nav);
@@ -164,10 +165,12 @@ export function Navigator({ className }: { className?: string }) {
   const short = useTwin((s) => s.state.inventory.filter((i) => i.short).length);
   const live = useTwin((s) => s.mode === "live");
   const [filter, setFilter] = useState("");
+  const canMenu = useCan("manage_menu");
   const tabs: IconTab<NavTab>[] = [
     { id: "kitchen", icon: LayoutGrid, label: "Kitchen" },
     { id: "orders", icon: ListOrdered, label: "Orders" },
     { id: "pantry", icon: Package, label: "Pantry", badge: short },
+    ...(canMenu ? [{ id: "menu" as const, icon: BookOpen, label: "Menu" }] : []),
     { id: "issues", icon: AlertTriangle, label: "Issues", badge: issues },
     { id: "activity", icon: History, label: "Activity" },
   ];
@@ -184,7 +187,7 @@ export function Navigator({ className }: { className?: string }) {
       </div>
       <div className="px-3.5 pb-1 text-[11px] font-extrabold text-mute">{TITLES[nav]}</div>
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-        {nav === "kitchen" ? <KitchenTree filter={filter} /> : nav === "orders" ? <OrdersList filter={filter} /> : nav === "pantry" ? <Pantry /> : nav === "issues" ? <Issues /> : nav === "team" && live ? <TeamPanel /> : <Activity />}
+        {nav === "kitchen" ? <KitchenTree filter={filter} /> : nav === "orders" ? <OrdersList filter={filter} /> : nav === "pantry" ? <Pantry /> : nav === "menu" && canMenu ? <MenuPanel /> : nav === "issues" ? <Issues /> : nav === "team" && live ? <TeamPanel /> : <Activity />}
       </div>
       {filterable && (
         <div className="border-t border-line p-2">

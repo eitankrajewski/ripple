@@ -23,7 +23,7 @@ import { buildPayload, fallbackExplanation, requestExplanation, requestWording, 
 
 export type Speed = 1 | 2 | 4;
 export type Tab = "inspect" | "plan" | "ask";
-export type NavTab = "kitchen" | "orders" | "pantry" | "issues" | "activity" | "team";
+export type NavTab = "kitchen" | "orders" | "pantry" | "menu" | "issues" | "activity" | "team";
 export type AreaId = "orders" | "pantry" | "prep" | "cook" | "pack" | "pickup";
 export type Mode = "sim" | "live";
 
