@@ -10,12 +10,14 @@ All outcomes are **simulated projections**. The order feed is simulated; there i
 
 ## What's in the demo
 
+- **Kitchen floor**: an illustrated line (Orders in → Pantry → Prep → Cook → Pack → Pickup) with live load bars, order chips and animated flow. Stations glow and pulse where the ripple hits. Tap any order to trace what is slowing it down.
 - **Seeded scenario**: five healthy orders, background orders every 5–8 s, and a guaranteed heavy chicken rush at ~40 s that causes a chicken shortage, Prep above 100% and several late orders.
-- **Ripple Map**: fixed-layout cause/effect graph with glowing critical nodes and animated pulses along active edges. Click any order to trace it back to the root cause.
-- **Decision Sandbox**: *Protect Pickup Times*, *Reduce Kitchen Overload* and *Minimize Waste*, each with deterministic metrics vs. "no change", a trade-off, and a map preview of what changes. Nothing is applied until you approve.
-- **Order tablet**: live feed + tickets, with release/cancel for held orders.
-- **Controls**: pause / play, 1×/2×/4× speed, *Send rush order*, stock recount (pencil icon in Inventory), and *Reset* to the exact initial seed.
-- **Why panel**: a deterministic explanation. Optionally, Gemini can reword it. Gemini never calculates anything.
+- **Plan**: *Protect Pickup Times*, *Reduce Kitchen Overload* and *Minimize Waste*, each with deterministic metrics vs. "no change" and a trade-off. Selecting one previews it on the kitchen floor; nothing is applied until you approve.
+- **Ask AI (what-ifs)**: type a question such as "What should we do if 20 customers suddenly walk in?" or "A cook calls out sick". A keyword parser turns it into a scenario you can adjust, the twin plays it out on a copy of the kitchen and ranks responses (strategies, adding staff, emergency restock). You can then play it on the live twin.
+- **Incoming orders**: ticket cards with filters (All / At risk / Held), release or cancel held orders, plus an activity log.
+- **Pantry**: on hand vs. needed, tap a number to recount stock.
+- **Controls**: play / pause, 1×/2×/4× speed, *Rush order*, and *Reset* to the exact initial seed.
+- **AI wording**: optional Gemini rephrasing of the deterministic explanations. Gemini never calculates anything; without a key the deterministic text is used.
 
 ## Run locally
 
@@ -33,8 +35,8 @@ Optional AI wording: create `.env.local` with `GEMINI_API_KEY=...` (never commit
 ## Project layout
 
 ```
-src/engine/   seed data, simulation (ingestEvent, tick, project), graph + strategies, tests
-src/components/  Ripple Map, Order tablet, Decision Sandbox, vitals, glance bar
+src/engine/      seed data, simulation (ingestEvent, tick, project), strategies, what-if scenarios, tests
+src/components/  Kitchen floor, orders, Plan / Ask AI / Pantry side panel, illustrations
 src/store.ts  zustand store wiring the engine to the UI
 api/explain.ts   Vercel serverless function for optional Gemini wording
 server/       dev-server middleware that mirrors /api/explain locally
@@ -72,4 +74,4 @@ This repo includes `.github/workflows/deploy-pages.yml`.
 1. On GitHub: *Settings → Pages → Build and deployment → Source: **GitHub Actions***.
 2. Push to `main`. The workflow builds and publishes to `https://<your-username>.github.io/<repo-name>/`.
 
-The "Rephrase with AI" button falls back to deterministic text on Pages, since there is no server.
+"Rephrase with AI" falls back to deterministic text on Pages, since there is no server.

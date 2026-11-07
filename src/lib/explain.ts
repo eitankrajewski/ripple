@@ -1,3 +1,4 @@
+import type { ScenarioResult } from "../engine/scenario";
 import type { DigitalTwinState, Explanation, StrategyOption } from "../engine/types";
 
 export interface ExplainPayload {
@@ -68,11 +69,16 @@ export function fallbackExplanation(p: ExplainPayload): Explanation {
 }
 
 export async function requestExplanation(p: ExplainPayload, signal?: AbortSignal): Promise<Explanation> {
+  return requestWording(p, fallbackExplanation(p), signal);
+}
+
+/** Asks the server to reword deterministic facts. Any failure returns the deterministic text. */
+export async function requestWording(payload: unknown, fallback: Explanation, signal?: AbortSignal): Promise<Explanation> {
   try {
     const res = await fetch("/api/explain", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(p),
+      body: JSON.stringify(payload),
       signal,
     });
     if (!res.ok) throw new Error(String(res.status));
@@ -80,6 +86,43 @@ export async function requestExplanation(p: ExplainPayload, signal?: AbortSignal
     if (!data.headline || !data.causeChain || !data.recommendationReason || !data.tradeoff) throw new Error("bad shape");
     return { headline: data.headline, causeChain: data.causeChain, recommendationReason: data.recommendationReason, tradeoff: data.tradeoff, source: "gemini" };
   } catch {
-    return fallbackExplanation(p);
+    return fallback;
   }
+}
+
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+export function scenarioPayload(question: string, r: ScenarioResult) {
+  return {
+    question,
+    interpretedAs: r.title,
+    assumptions: r.assumptions,
+    now: r.before,
+    ifNothingChanges: r.after,
+    stations: r.stations.map((s) => ({ name: s.name, loadNow: pct(s.before), loadAfter: pct(s.after) })),
+    shortages: r.shortages,
+    options: r.options.map((o) => ({ label: o.label, best: o.id === r.bestId, metrics: o.metrics, tradeoff: o.tradeoff })),
+  };
+}
+
+export function scenarioExplanation(r: ScenarioResult): Explanation {
+  const best = r.options.find((o) => o.id === r.bestId)!;
+  const hot = r.stations.filter((s) => s.after > 0.85).sort((a, b) => b.after - a.after);
+  const chain = [
+    r.addedTickets ? `Adds ${plural(r.addedTickets, "ticket")} (${plural(r.addedItems, "item")})` : r.title,
+    ...hot.map((s) => `${s.name} ${pct(s.before)} → ${pct(s.after)}`),
+    ...r.shortages.map((s) => `${s.name} short (${s.onHand} left, need ${s.need})`),
+  ];
+  const late = r.after.projectedLateOrders;
+  return {
+    headline: late
+      ? `${r.title}: ${plural(late, "order")} would be late if nothing changes.`
+      : r.after.ordersAtRisk
+        ? `${r.title}: no late orders, but ${r.after.ordersAtRisk} get tight.`
+        : `${r.title}: the kitchen absorbs it.`,
+    causeChain: chain.join(" → "),
+    recommendationReason: `Best option: ${best.label}. ${plural(best.metrics.projectedLateOrders, "late order")} instead of ${late}, busiest station at ${pct(best.metrics.maxStationUtilization)}.`,
+    tradeoff: best.tradeoff,
+    source: "fallback",
+  };
 }

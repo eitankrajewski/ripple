@@ -638,7 +638,7 @@ export const fmt = (n: number) => (Math.abs(n) >= 10 ? Math.round(n).toString() 
 // Phase & approval
 // ---------------------------------------------------------------------------
 
-function evaluatePhase(k: Kitchen) {
+export function evaluatePhase(k: Kitchen) {
   if (k.planMode === "protect_pickups") {
     const pre = project(k, { mode: k.planMode, holdBlocked: true });
     for (const id of pre.heldIds) {

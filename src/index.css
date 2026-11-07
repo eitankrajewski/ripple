@@ -1,25 +1,26 @@
 @import "tailwindcss";
-@import "@xyflow/react/dist/style.css";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Space Grotesk", "Inter", ui-sans-serif, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-sans: "Nunito", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  --font-display: "Nunito", ui-rounded, system-ui, sans-serif;
 
-  --color-ink-950: #05070d;
-  --color-ink-900: #0a0e18;
-  --color-ink-800: #111727;
-  --color-ink-700: #1a2236;
-  --color-ok: #2dd4bf;
-  --color-warn: #fbbf24;
-  --color-crit: #fb7185;
-  --color-accent: #818cf8;
+  --color-ink: #3c3c3c;
+  --color-mute: #8a8f98;
+  --color-line: #e5e7eb;
+  --color-ok: #58cc02;
+  --color-ok-dark: #46a302;
+  --color-warn: #ffab00;
+  --color-crit: #ff4b4b;
+  --color-crit-dark: #d93a3a;
+  --color-sky: #1cb0f6;
+  --color-sky-dark: #1899d6;
+  --color-grape: #a970ff;
 }
 
 :root {
-  color-scheme: dark;
-  background: var(--color-ink-950);
-  color: #e2e8f0;
+  color-scheme: light;
+  background: #f4f4f5;
+  color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
@@ -27,7 +28,7 @@
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {
@@ -35,113 +36,199 @@ body {
   overflow-x: hidden;
 }
 
-.aurora {
+/* Soft, blurred shapes that the glass panels frost over. */
+.backdrop {
   position: fixed;
   inset: 0;
-  pointer-events: none;
   z-index: 0;
-  background:
-    radial-gradient(60rem 40rem at 10% -10%, rgba(99, 102, 241, 0.18), transparent 60%),
-    radial-gradient(50rem 35rem at 100% 0%, rgba(45, 212, 191, 0.12), transparent 60%),
-    radial-gradient(60rem 40rem at 50% 120%, rgba(244, 63, 94, 0.08), transparent 60%);
-  transition: background 1.2s ease;
-}
-.aurora[data-level="critical"] {
-  background:
-    radial-gradient(60rem 40rem at 10% -10%, rgba(244, 63, 94, 0.2), transparent 60%),
-    radial-gradient(50rem 35rem at 100% 0%, rgba(251, 191, 36, 0.1), transparent 60%),
-    radial-gradient(60rem 40rem at 50% 120%, rgba(99, 102, 241, 0.12), transparent 60%);
-}
-.grid-bg {
-  position: fixed;
-  inset: 0;
   pointer-events: none;
-  z-index: 0;
-  background-image:
-    linear-gradient(rgba(148, 163, 184, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.045) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+  background:
+    radial-gradient(40% 50% at 12% 18%, rgba(28, 176, 246, 0.16), transparent 70%),
+    radial-gradient(35% 45% at 88% 12%, rgba(169, 112, 255, 0.14), transparent 70%),
+    radial-gradient(50% 50% at 70% 85%, rgba(88, 204, 2, 0.1), transparent 70%),
+    radial-gradient(60% 60% at 30% 90%, rgba(120, 120, 128, 0.14), transparent 70%),
+    #f5f5f6;
+  transition: background 0.8s ease;
+}
+.backdrop[data-level="critical"] {
+  background:
+    radial-gradient(40% 50% at 12% 18%, rgba(255, 75, 75, 0.16), transparent 70%),
+    radial-gradient(35% 45% at 88% 12%, rgba(255, 171, 0, 0.14), transparent 70%),
+    radial-gradient(50% 50% at 70% 85%, rgba(169, 112, 255, 0.1), transparent 70%),
+    radial-gradient(60% 60% at 30% 90%, rgba(120, 120, 128, 0.14), transparent 70%),
+    #f6f5f5;
+}
+.blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(60px);
+  opacity: 0.55;
+  animation: drift 22s ease-in-out infinite alternate;
+}
+@keyframes drift {
+  to {
+    transform: translate3d(40px, -30px, 0) scale(1.08);
+  }
 }
 
+@layer components {
 .glass {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.5));
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.85);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 20px 50px -20px rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(16px);
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 24px 60px -28px rgba(30, 30, 40, 0.22);
 }
 
-.text-gradient {
-  background: linear-gradient(120deg, #5eead4 0%, #818cf8 55%, #f0abfc 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+/* Frosted gray, like a sheet of matte glass. */
+.frost {
+  background:
+    radial-gradient(120% 90% at 85% 15%, rgba(255, 255, 255, 0.0), rgba(255, 255, 255, 0.35)),
+    linear-gradient(165deg, rgba(246, 246, 248, 0.78), rgba(226, 227, 231, 0.62));
+  backdrop-filter: blur(22px) saturate(1.3);
+  -webkit-backdrop-filter: blur(22px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 14px 34px -20px rgba(30, 30, 40, 0.25);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2.6rem;
+  padding: 0 1.1rem;
+  border-radius: 9999px;
+  background: rgba(240, 240, 242, 0.85);
+  backdrop-filter: blur(12px);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--color-ink);
+  transition: background 0.2s, transform 0.15s;
+}
+.pill:hover {
+  background: #fff;
+}
+.pill:active {
+  transform: scale(0.97);
+}
+
+/* Chunky, tactile buttons. */
+.btn3d {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 16px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: var(--c, var(--color-sky));
+  box-shadow: 0 4px 0 var(--d, var(--color-sky-dark));
+  transition: transform 0.08s, box-shadow 0.08s, filter 0.2s;
+}
+.btn3d:hover {
+  filter: brightness(1.05);
+}
+.btn3d:active {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 var(--d, var(--color-sky-dark));
+}
+.btn3d:disabled {
+  --c: #e5e5e5;
+  --d: #cfcfcf;
+  color: #afafaf;
+  cursor: not-allowed;
+  transform: none;
+}
+
+}
+
+.floor {
+  background-color: #fafafa;
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.035) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+
+.flow-dots {
+  background-image: radial-gradient(circle, var(--dot, #c7c9cf) 2.2px, transparent 2.6px);
+  background-size: 14px 8px;
+  background-repeat: repeat-x;
+  background-position: 0 center;
+  animation: flow var(--speed, 1.6s) linear infinite;
+}
+@keyframes flow {
+  to {
+    background-position: 14px center;
+  }
+}
+
+.ring-pulse {
+  animation: ringPulse 2.2s ease-out infinite;
+}
+@keyframes ringPulse {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.bob {
+  animation: bob 2.4s ease-in-out infinite;
+}
+@keyframes bob {
+  50% {
+    transform: translateY(-3px);
+  }
+}
+.flicker {
+  transform-origin: 50% 100%;
+  animation: flicker 0.9s ease-in-out infinite alternate;
+}
+@keyframes flicker {
+  to {
+    transform: scaleY(1.18) scaleX(0.92);
+  }
+}
+.steam {
+  animation: steam 2.6s ease-in-out infinite;
+}
+@keyframes steam {
+  0% {
+    transform: translateY(4px);
+    opacity: 0;
+  }
+  40% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
 }
 
 .scroll-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
-}
-
-/* React Flow theming */
-.react-flow {
-  --xy-background-color: transparent;
-  --xy-edge-stroke: rgba(148, 163, 184, 0.18);
-}
-.react-flow__attribution {
-  display: none;
-}
-.react-flow__handle {
-  opacity: 0;
-  pointer-events: none;
-}
-.react-flow__node {
-  cursor: pointer;
-}
-
-@keyframes dash-flow {
-  to {
-    stroke-dashoffset: -24;
-  }
-}
-.edge-flow {
-  stroke-dasharray: 6 6;
-  animation: dash-flow 0.9s linear infinite;
-}
-
-@keyframes ring {
-  0% {
-    transform: scale(0.6);
-    opacity: 0.7;
-  }
-  100% {
-    transform: scale(2.4);
-    opacity: 0;
-  }
-}
-.ripple-ring {
-  animation: ring 2.4s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
-}
-
-@keyframes breathe {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-.breathe {
-  animation: breathe 1.8s ease-in-out infinite;
+  scrollbar-color: #d4d4d8 transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .edge-flow,
-  .ripple-ring,
-  .breathe {
-    animation: none;
+  .flow-dots,
+  .ring-pulse,
+  .bob,
+  .flicker,
+  .steam,
+  .blob {
+    animation: none !important;
   }
 }
