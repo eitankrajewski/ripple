@@ -1,18 +1,22 @@
-import { CameraControls, Grid, Line, RoundedBox } from "@react-three/drei";
+import { CameraControls, Grid, Html, Line, RoundedBox } from "@react-three/drei";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import clsx from "clsx";
-import { ChevronLeft, ChevronRight, Minus, Plus, Scan } from "lucide-react";
-import { Component, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { ChevronLeft, ChevronRight, Minus, Plus, Scan, SquarePlus, X } from "lucide-react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
 import { useDrag, type DropTarget } from "../lib/drag";
-import type { RiskLevel } from "../engine/types";
+import type { PlacedStation, RiskLevel, StationKind } from "../engine/types";
+import { uid } from "../live/backend";
+import { haptic } from "../lib/haptics";
+import { useCan } from "../store";
 import { AREA_ORDER, culpritArea, useAreas, type Area, type AreaId } from "../lib/areas";
 import { pct, RISK_HEX } from "../lib/ui";
 import { useTwin } from "../store";
 
 const C = {
   floor: "#e7ebf2",
-  wall: "#f3f5f9",
+  wall: "#ff5f1f",
+  trim: "#f6f7fa",
   steel: "#d6dbe4",
   steelDark: "#a3a8b0",
   dark: "#50545c",
@@ -320,8 +324,71 @@ function Room() {
       <Grid position={[0, 0.002, -0.2]} args={[22, 13]} cellSize={1} cellThickness={0.6} cellColor="#d7dce6" sectionSize={4} sectionThickness={0.9} sectionColor="#c9d0dd" fadeDistance={60} infiniteGrid={false} />
       <Box p={[0, 1.2, -6.65]} s={[22, 2.4, 0.18]} c={C.wall} r={0.03} />
       <Box p={[-10.95, 1.2, -0.2]} s={[0.18, 2.4, 13]} c={C.wall} r={0.03} />
+      <Box p={[0, 0.12, -6.53]} s={[22, 0.24, 0.08]} c={C.trim} r={0.02} />
+      <Box p={[-10.83, 0.12, -0.2]} s={[0.08, 0.24, 13]} c={C.trim} r={0.02} />
+      <Box p={[0.1, 0.004, 6.28]} s={[21.8, 0.02, 0.1]} c={C.wall} r={0.005} />
     </group>
   );
+}
+
+const KIND_LABEL: Record<StationKind, string> = { orders: "Orders in", pantry: "Pantry", prep: "Prep", cook: "Cook", pack: "Pack", pickup: "Pickup" };
+const FLOOR = { x: [-10.2, 10.2], z: [-5.6, 5.6] } as const;
+const snap = (v: number, [lo, hi]: readonly [number, number]) => Math.min(hi, Math.max(lo, Math.round(v * 2) / 2));
+
+function PlacedNode({ p, n, canEdit }: { p: PlacedStation; n: number; canEdit: boolean }) {
+  const act = useTwin((s) => s.act);
+  const Model = MODEL[p.kind];
+  return (
+    <group position={[p.x, 0, p.z]}>
+      <Model busy={false} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
+        <ringGeometry args={[1.75, 1.82, 64]} />
+        <meshBasicMaterial color={C.wall} transparent opacity={0.7} depthWrite={false} />
+      </mesh>
+      <Html position={[0, 2.2, 0]} center zIndexRange={[20, 0]}>
+        <div className="flex items-center gap-1 rounded-full border border-navy/10 bg-white/90 py-0.5 pr-1 pl-2.5 text-[12px] font-bold whitespace-nowrap shadow-[0_4px_14px_-6px_rgba(0,0,0,0.25)] select-none">
+          <span className="size-2 rounded-full" style={{ background: C.wall }} />
+          {KIND_LABEL[p.kind]} {n}
+          {canEdit && (
+            <button
+              title="Remove station"
+              className="ml-0.5 flex size-5 items-center justify-center rounded-full text-mute hover:bg-navy/10 hover:text-ink"
+              onClick={() => {
+                haptic("tick");
+                void act({ type: "station_removed", id: p.id });
+              }}
+            >
+              <X className="size-3" />
+            </button>
+          )}
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+function Ghost({ at }: { at: { x: number; z: number; ok: boolean } | null }) {
+  if (!at) return null;
+  const c = at.ok ? C.wall : RISK_HEX.critical;
+  return (
+    <group position={[at.x, 0, at.z]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]}>
+        <circleGeometry args={[1.8, 48]} />
+        <meshBasicMaterial color={c} transparent opacity={0.18} depthWrite={false} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+        <ringGeometry args={[1.72, 1.82, 64]} />
+        <meshBasicMaterial color={c} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Keeps a handle on the camera so palette drops can be projected onto the floor. */
+function CameraGrab({ onCamera }: { onCamera: (c: THREE.Camera) => void }) {
+  const camera = useThree((s) => s.camera);
+  useEffect(() => onCamera(camera), [camera, onCamera]);
+  return null;
 }
 
 const FLOW: [AreaId, AreaId][] = [
@@ -345,7 +412,9 @@ function homeView(width: number, height: number, insets: Insets) {
   return [t[0] + dir.x, t[1] + dir.y, t[2] + dir.z, ...t] as const;
 }
 
-function Scene({ controls, insets }: { controls: React.RefObject<CameraControls | null>; insets: Insets }) {
+function Scene({ controls, insets, ghost }: { controls: React.RefObject<CameraControls | null>; insets: Insets; ghost: { x: number; z: number; ok: boolean } | null }) {
+  const layout = useTwin((s) => s.state.layout);
+  const canEdit = useCan("manage_layout");
   const size = useThree((s) => s.size);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const { areas } = useAreas();
@@ -398,6 +467,10 @@ function Scene({ controls, insets }: { controls: React.RefObject<CameraControls 
           onSelect={() => selectArea(area === a.id ? null : a.id)}
         />
       ))}
+      {layout.map((p) => (
+        <PlacedNode key={p.id} p={p} n={layout.filter((x) => x.kind === p.kind).indexOf(p) + 2} canEdit={canEdit} />
+      ))}
+      <Ghost at={ghost} />
     </>
   );
 }
@@ -489,6 +562,60 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
   }, []);
   const area = useTwin((s) => s.area);
   const selectArea = useTwin((s) => s.selectArea);
+  const act = useTwin((s) => s.act);
+  const canEdit = useCan("manage_layout");
+  const [palette, setPalette] = useState(false);
+  const [carry, setCarry] = useState<{ kind: StationKind; x: number; y: number } | null>(null);
+  const [ghost, setGhost] = useState<{ x: number; z: number; ok: boolean } | null>(null);
+  const layout = useTwin((s) => s.state.layout);
+  const taken = [...Object.values(POS), ...layout.map((p) => [p.x, p.z] as [number, number])];
+  const free = (x: number, z: number) => taken.every(([tx, tz]) => Math.abs(tx - x) > 2.6 || Math.abs(tz - z) > 1.9);
+  const wrap = useRef<HTMLDivElement>(null);
+  const cam = useRef<THREE.Camera | null>(null);
+  const grabCamera = useCallback((c: THREE.Camera) => {
+    cam.current = c;
+  }, []);
+  const floorAt = (cx: number, cy: number) => {
+    const el = wrap.current;
+    if (!el || !cam.current) return null;
+    const r = el.getBoundingClientRect();
+    if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) return null;
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), cam.current);
+    const hit = new THREE.Vector3();
+    if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit)) return null;
+    const x = snap(hit.x, FLOOR.x);
+    const z = snap(hit.z, FLOOR.z);
+    return { x, z, ok: free(x, z) };
+  };
+  const pick = (kind: StationKind) => (e: React.PointerEvent) => {
+    e.preventDefault();
+    haptic("pick");
+    setCarry({ kind, x: e.clientX, y: e.clientY });
+    let last: { x: number; z: number; ok: boolean } | null = null;
+    const move = (ev: PointerEvent) => {
+      setCarry({ kind, x: ev.clientX, y: ev.clientY });
+      const at = (ev.target as HTMLElement | null)?.closest?.("[data-palette]") ? null : floorAt(ev.clientX, ev.clientY);
+      if (at && (at.x !== last?.x || at.z !== last?.z)) haptic("tick");
+      last = at;
+      setGhost(at);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      setCarry(null);
+      setGhost(null);
+      if (last && !last.ok) haptic("error");
+      if (last?.ok) {
+        haptic("drop");
+        void act({ type: "station_added", station: { id: uid(10), kind, x: last.x, z: last.z } });
+      }
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
   const name = useAreas().areas.find((a) => a.id === area)?.name ?? "Whole kitchen";
   const step = (d: number) => {
     const i = area ? AREA_ORDER.indexOf(area) : d > 0 ? -1 : AREA_ORDER.length;
@@ -496,7 +623,7 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
   };
 
   return (
-    <div className="relative h-full w-full bg-[radial-gradient(120%_90%_at_50%_0%,#f9fbfe,#dfe5f0)]">
+    <div ref={wrap} className="relative h-full w-full bg-[radial-gradient(120%_90%_at_50%_0%,#f9fbfe,#dfe5f0)]">
       <GLBoundary>
         <Canvas shadows dpr={[1, 2]} camera={{ position: [...HOME.pos], fov: 34 }} gl={{ antialias: true, alpha: true }}>
           <fog attach="fog" args={["#e8ecf4", 60, 110]} />
@@ -513,11 +640,36 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
             truckSpeed={2.6}
             dollyToCursor
           />
-          <Scene controls={controls} insets={insets} />
+          <Scene controls={controls} insets={insets} ghost={ghost} />
+          <CameraGrab onCamera={grabCamera} />
           <MarkerTracker place={place} />
         </Canvas>
         <Markers register={register} />
       </GLBoundary>
+      {canEdit && palette && (
+        <div data-palette className="sidebar absolute bottom-20 left-1/2 w-[min(92%,560px)] -translate-x-1/2 rounded-[14px]! p-3 lg:bottom-[74px]">
+          <div className="mb-2 flex items-center gap-2 text-[12.5px] font-extrabold">
+            Add a station
+            <span className="font-semibold text-faint">drag onto the floor · each one adds a person to that station</span>
+            <button className="tbtn ml-auto size-6!" onClick={() => setPalette(false)} aria-label="Close">
+              <X className="size-3.5" />
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+            {(Object.keys(KIND_LABEL) as StationKind[]).map((k) => (
+              <button key={k} onPointerDown={pick(k)} className="flex h-11 touch-none items-center justify-center gap-1.5 rounded-[10px] border border-navy/12 bg-white text-[12.5px] font-bold hover:border-[#ff5f1f]/60 active:cursor-grabbing" style={{ cursor: "grab" }}>
+                <span className="size-2 rounded-full" style={{ background: C.wall }} />
+                {KIND_LABEL[k]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {carry && (
+        <div className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ff5f1f] px-3 py-1.5 text-[12.5px] font-extrabold text-white shadow-lg" style={{ left: carry.x, top: carry.y - 28 }}>
+          {KIND_LABEL[carry.kind]} {ghost ? (ghost.ok ? "· release to place" : "· too close to another station") : ""}
+        </div>
+      )}
       <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-4 lg:bottom-5">
         <div className="sidebar pointer-events-auto flex items-center gap-0.5 rounded-full! p-1">
           <button className="tbtn rounded-full!" onClick={() => selectArea(null)} title="Whole kitchen">
@@ -538,6 +690,14 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
           <button className="tbtn rounded-full!" onClick={() => void controls.current?.dolly(-3, true)} aria-label="Zoom out">
             <Minus className="size-4" />
           </button>
+          {canEdit && (
+            <>
+              <span className="mx-1 h-4 w-px bg-navy/10" />
+              <button className={clsx("tbtn rounded-full!", palette && "bg-navy! text-white!")} onClick={() => setPalette(!palette)} title="Add stations (manager)">
+                <SquarePlus className="size-4" />
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
