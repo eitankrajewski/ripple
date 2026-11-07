@@ -5,6 +5,7 @@ import { AREA_ORDER, culpritArea, useAreas, type Area } from "../lib/areas";
 import { minutes, pct, SOURCE, statusLabel } from "../lib/ui";
 import { useTwin, type Tab } from "../store";
 import { AskTab } from "./AskTab";
+import { PantryAdd } from "./PantryAdd";
 import { Dot, IconTabs, LoadBar, OrderRow, PantryRow, RiskChip, Section, SimBadge } from "./kit";
 import { PlanTab } from "./PlanTab";
 
@@ -69,6 +70,7 @@ function AreaInspector({ a }: { a: Area }) {
 
       {a.id === "pantry" && (
         <Section title="Stock">
+          <PantryAdd />
           <div className="card p-1">
             {[...inventory]
               .sort((x, y) => Number(y.short) - Number(x.short))

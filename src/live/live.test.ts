@@ -159,4 +159,17 @@ describe("item-level routing, layout and menu", () => {
     expect(k.config.menu.some((m) => m.id === "wings")).toBe(true);
     expect(replay(START, []).config.menu.some((m) => m.id === "wings")).toBe(false);
   });
+
+  it("managers add pantry ingredients and link them to dishes that had none", () => {
+    const ingredient = { id: "avocado", name: "Avocado", unit: "pcs", stock: 12, usedIn: ["wings"] };
+    expect(allowed("prep", { type: "ingredient_added", ingredient })).toBe(false);
+    expect(allowed("manager", { type: "ingredient_added", ingredient })).toBe(true);
+    const k = replay(START, [
+      ev(1, manager, { type: "menu_item_added", item: { id: "wings", name: "Wings", ingredients: {}, minutes: { prep: 1, cook: 2, pack: 0.3 } } }),
+      ev(2, manager, { type: "ingredient_added", ingredient }),
+    ]);
+    expect(k.config.ingredients.find((i) => i.id === "avocado")).toMatchObject({ name: "Avocado", unit: "pcs", stock: 12 });
+    expect(k.inventory.avocado).toBe(12);
+    expect(k.config.menu.find((m) => m.id === "wings")!.ingredients).toEqual({ avocado: 1 });
+  });
 });

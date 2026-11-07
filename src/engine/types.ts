@@ -18,6 +18,14 @@ export interface NewMenuItem {
   ingredients: Record<string, number>;
   minutes: Record<StationId, number>;
 }
+export interface NewIngredient {
+  id: string;
+  name: string;
+  unit: string;
+  stock: number;
+  /** Menu items that use one of this ingredient each. */
+  usedIn?: string[];
+}
 export type Phase = "initial" | "disrupted" | "approved";
 
 export interface OrderItem {
@@ -28,12 +36,14 @@ export interface OrderItem {
 export interface OrderEvent {
   type:
     | "order_received" | "rush_order" | "stock_correction" | "task_done" | "picked_up" | "move_order" | "pack_item" | "dasher_update" | "handoff_mismatch"
-    | "item_done" | "station_added" | "station_removed" | "menu_item_added";
+    | "item_done" | "station_added" | "station_removed" | "menu_item_added" | "ingredient_added";
   /** Layout changes (station_added / station_removed). */
   placed?: PlacedStation;
   placedId?: string;
   /** For menu_item_added. */
   menuItem?: NewMenuItem;
+  /** For ingredient_added. */
+  ingredient?: NewIngredient;
   orderId?: string;
   source?: OrderSource;
   items?: OrderItem[];

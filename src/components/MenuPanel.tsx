@@ -196,7 +196,7 @@ export function MenuPanel() {
               <span className="min-w-0 flex-1 truncate">{m.name}</span>
               <span className="shrink-0 text-[11px] font-semibold text-faint tabular-nums">{Math.round((m.minutes.prep + m.minutes.cook + m.minutes.pack) * 10) / 10}m</span>
             </div>
-            <div className="truncate text-[11.5px] font-semibold text-mute">{Object.keys(m.ingredients).map(name).join(", ") || "no pantry items"}</div>
+            <div className="truncate text-[11.5px] font-semibold text-mute">{Object.keys(m.ingredients).map(name).join(", ") || <span className="text-warn">no ingredients yet · add them in Pantry</span>}</div>
           </li>
         ))}
       </ul>

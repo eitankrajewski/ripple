@@ -393,6 +393,22 @@ export function ingestEvent(k: Kitchen, event: OrderEvent): Kitchen {
       pushFeed(k, "system", `Menu: ${item.name} added${event.by ? ` · ${event.by}` : ""}`);
       break;
     }
+    case "ingredient_added": {
+      const g = event.ingredient;
+      if (!g || !g.id || !g.name.trim()) break;
+      const prev = k.config.ingredients.find((i) => i.id === g.id);
+      const ing = { freshnessMinutes: 240, allergens: [], preppable: true, ...prev, id: g.id, name: g.name.trim(), unit: g.unit.trim() || "portions", stock: Math.max(0, Math.round(g.stock)) };
+      const used = new Set(g.usedIn ?? []);
+      k.config = {
+        ...k.config,
+        ingredients: prev ? k.config.ingredients.map((i) => (i.id === g.id ? ing : i)) : [...k.config.ingredients, ing],
+        menu: k.config.menu.map((m) => (used.has(m.id) && !m.ingredients[g.id] ? { ...m, ingredients: { ...m.ingredients, [g.id]: 1 } } : m)),
+      };
+      if (!prev) k.inventory[g.id] = ing.stock;
+      pushFeed(k, "system", `Pantry: ${ing.name} added (${ing.stock} ${ing.unit})${event.by ? ` · ${event.by}` : ""}`);
+      for (const o of k.orders) if (o.held && canAllocate(k, o)) o.held = false;
+      break;
+    }
     case "item_done": {
       if (event.orderId && event.menuItemId && event.station) completeItem(k, event.orderId, event.menuItemId, event.station, event.by);
       break;

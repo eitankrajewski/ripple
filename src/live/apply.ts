@@ -41,6 +41,9 @@ export function applyAction(k: Kitchen, a: LiveAction, by?: string) {
     case "menu_item_added":
       ingestEvent(k, { type: "menu_item_added", menuItem: a.item, by });
       break;
+    case "ingredient_added":
+      ingestEvent(k, { type: "ingredient_added", ingredient: a.ingredient, by });
+      break;
     case "task_done":
       ingestEvent(k, { type: "task_done", orderId: a.orderId, station: a.station, by });
       break;

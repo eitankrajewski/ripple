@@ -7,6 +7,7 @@ import { useCan, useTwin, type NavTab } from "../store";
 import { Dot, IconTabs, OrderRow, PantryRow, type IconTab } from "./kit";
 import { TeamPanel } from "./live/TeamPanel";
 import { MenuPanel } from "./MenuPanel";
+import { PantryAdd } from "./PantryAdd";
 
 function KitchenTree({ filter }: { filter: string }) {
   const { areas } = useAreas();
@@ -148,6 +149,7 @@ function Pantry() {
   const sorted = [...inv].sort((a, b) => Number(b.short) - Number(a.short) || b.need / Math.max(1, b.onHand) - a.need / Math.max(1, a.onHand));
   return (
     <div>
+      <PantryAdd />
       <p className="px-1 pb-2 text-[11.5px] text-faint">On hand / needed for open tickets. Click a number to recount.</p>
       {sorted.map((i) => (
         <PantryRow key={i.id} i={i} />
