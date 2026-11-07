@@ -48,7 +48,7 @@ To run Supabase locally instead, run `npx supabase start` (needs Docker). Then s
 
 | Role | Typical device | Sees | Can do |
 | --- | --- | --- | --- |
-| **Manager** | Laptop / office tablet | Full 3D twin, plans, Ask AI, team | Everything below, plus approve plans, release/cancel held orders, manage team |
+| **Manager** | Laptop / office tablet | Full 3D twin, plans, Ask AI, team, menu | Everything below, plus approve plans, release/cancel held orders, manage team, edit the station layout and the menu |
 | **Prep** | Prep-station tablet | Prep tickets (station screen) + read-only twin | Check off **prep**, recount pantry stock |
 | **Line cook** | Line tablet | Cook tickets + read-only twin | Check off **cook** |
 | **Expo / Pack** | Pass / expo tablet | Pack tickets, ready shelf | Check off **pack**, mark **picked up** |
@@ -82,6 +82,9 @@ TypeScript shapes live in `src/live/types.ts` (`KitchenSpace`, `Member`, `LiveEv
 | `member_joined` / `member_left` | anyone (self) | Team list |
 | `order_received` | manager, host | New ticket at Orders in |
 | `task_done {orderId, station}` | manager, that station | Clears the station's work. The first prep check-off draws ingredients from the pantry. After pack, the order is ready |
+| `item_done {orderId, menuItemId, station}` | manager, that station | Sends one component of an order to the next station. Pack can't finish until every component has arrived |
+| `station_added {station: {id, kind, x, z}}` / `station_removed {id}` | manager | Adds or removes a station on the 3D floor. Extra Prep/Cook/Pack stations add one to that station's capacity |
+| `menu_item_added {item}` | manager | Adds or replaces a dish (ingredients and per-station minutes), usually after reviewing a menu scan |
 | `picked_up {orderId}` | manager, expo, host | Removes the order and counts on-time / late |
 | `stock_correction` | manager, prep | Sets an ingredient's on-hand count |
 | `approve_plan` | manager | Applies a strategy (holds, deferrals, batching) |
