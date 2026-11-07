@@ -31,8 +31,15 @@ export function actorFor(session: LiveSession, as?: Actor): Actor {
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
+/** Random hex id. Uses getRandomValues, which (unlike randomUUID) also works on plain-http LAN addresses. */
+export function uid(len = 12) {
+  return Array.from(crypto.getRandomValues(new Uint8Array(Math.ceil(len / 2))), (b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, len);
+}
+
 function randomId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+  return `${prefix}_${uid()}`;
 }
 
 function randomCode() {

@@ -2,7 +2,7 @@ import { Copy, Minus, Plus, Send } from "lucide-react";
 import { useState } from "react";
 import { haptic } from "../../lib/haptics";
 import { minutes } from "../../lib/ui";
-import { backend, DOORDASH_ACTOR } from "../../live/backend";
+import { backend, DOORDASH_ACTOR, uid } from "../../live/backend";
 import { useTwin } from "../../store";
 
 const CUSTOMERS = ["Sam L.", "Riley P.", "Jordan K.", "Taylor B.", "Casey M.", "Morgan D.", "Avery S.", "Quinn H."];
@@ -35,7 +35,7 @@ export function DoorDashPanel() {
         items: merged,
         dasherName: pick(DASHERS),
         dasherEtaMinutes: 10 + Math.round(Math.random() * 16),
-        externalId: `dd-test-${crypto.randomUUID().slice(0, 8)}`,
+        externalId: `dd-test-${uid(8)}`,
       },
       DOORDASH_ACTOR,
     );

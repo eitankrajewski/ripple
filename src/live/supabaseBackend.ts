@@ -1,5 +1,5 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import { actorFor, normalizeCode, type LiveBackend, type Presence } from "./backend";
+import { actorFor, normalizeCode, uid, type LiveBackend, type Presence } from "./backend";
 import { allowed } from "./roles";
 import type { Actor, KitchenSpace, LiveAction, LiveEvent, LiveSession, Member, Role } from "./types";
 
@@ -44,7 +44,7 @@ function friendly(e: { message?: string } | null) {
 export class SupabaseBackend implements LiveBackend {
   readonly kind = "hosted" as const;
   private seq = 0;
-  private device = crypto.randomUUID().slice(0, 8);
+  private device = uid(8);
   private clientPromise: Promise<SupabaseClient> | null = null;
   private url: string;
   private key: string;
