@@ -44,6 +44,7 @@ function SpecEditor({ spec }: { spec: ScenarioSpec }) {
 function Result() {
   const sc = useTwin((s) => s.scenario);
   const { rephraseScenario, applyWhatIf, clearScenario } = useTwin.getState();
+  const live = useTwin((s) => s.mode === "live");
   const r = sc.result!;
   const best = r.options.find((o) => o.id === r.bestId);
   return (
@@ -110,9 +111,13 @@ function Result() {
       {sc.wording && <Wording e={sc.wording} loading={sc.wordingLoading} onRephrase={rephraseScenario} />}
       <p className="text-[11.5px] text-faint">Assumes: {r.assumptions.join(" · ")}.</p>
       <div className="flex gap-2">
-        <button onClick={applyWhatIf} className="btn btn-primary h-8! flex-1">
-          Play it on the live kitchen
-        </button>
+        {live ? (
+          <p className="flex-1 text-[11.5px] font-semibold text-mute">What-ifs never change the live kitchen.</p>
+        ) : (
+          <button onClick={applyWhatIf} className="btn btn-navy h-8! flex-1">
+            Play it in the simulation
+          </button>
+        )}
         <button onClick={clearScenario} className="btn h-8!" aria-label="New question" title="New question">
           <RotateCcw className="size-3.5" />
         </button>
@@ -133,7 +138,7 @@ export function AskTab() {
   };
   return (
     <div className="space-y-3">
-      <p className="text-mute">Ask a what-if. The twin plays it out on a copy of tonight’s kitchen; the live kitchen doesn’t change.</p>
+      <p className="text-mute">Ask a what-if. The twin plays it out on a copy of the kitchen right now; the real kitchen doesn’t change.</p>
       <form
         onSubmit={(e) => {
           e.preventDefault();

@@ -69,6 +69,10 @@ export interface Kitchen {
   selectedStrategyId?: StrategyId;
   approvedStrategyId?: StrategyId;
   stats: { pickedUp: number; onTime: number };
+  /** Live kitchens only move forward when staff check work off; nothing is generated. */
+  live?: boolean;
+  /** Wall-clock time (ms since epoch) a live service opened. */
+  liveStartedAt?: number;
 }
 
 export const nowMinutes = (k: Kitchen) => k.clockSeconds * k.config.simMinutesPerSecond;
@@ -302,13 +306,28 @@ export function ingestEvent(k: Kitchen, event: OrderEvent): Kitchen {
     case "task_done": {
       const o = k.orders.find((x) => x.id === event.orderId);
       if (!o || !isOpen(o)) break;
+      const station = STATION_IDS.find((s) => o.remaining[s] > 0);
+      if (event.station && station !== event.station) break;
       if (!o.consumed) {
         if (!canAllocate(k, o)) break;
         consume(k, o);
       }
-      const station = STATION_IDS.find((s) => o.remaining[s] > 0);
-      if (station) o.remaining[station] = 0;
+      if (station) {
+        o.remaining[station] = 0;
+        const name = cfg.stations.find((x) => x.id === station)?.name ?? station;
+        pushFeed(k, "system", `${name} done for #${o.num}${event.by ? ` · ${event.by}` : ""}`, o.id);
+      }
       if (STATION_IDS.every((s) => o.remaining[s] <= 0)) markReady(k, o);
+      break;
+    }
+    case "picked_up": {
+      const o = k.orders.find((x) => x.id === event.orderId);
+      if (!o) break;
+      if (isOpen(o)) markReady(k, o);
+      k.stats.pickedUp += 1;
+      if ((o.readyAtMin ?? 0) <= o.deadlineMin + cfg.lateGraceMinutes) k.stats.onTime += 1;
+      k.orders = k.orders.filter((x) => x.id !== o.id);
+      pushFeed(k, "ready", `#${o.num} picked up by ${o.customer}${event.by ? ` · ${event.by}` : ""}`, o.id);
       break;
     }
   }
@@ -361,6 +380,7 @@ export function sortForPlan(k: Kitchen, orders: SimOrder[], mode: PlanMode): Sim
 }
 
 export function tick(k: Kitchen, steps = 1): Kitchen {
+  if (k.live) return advanceTo(k, k.clockSeconds + steps);
   for (let i = 0; i < steps; i++) {
     if (k.feedPaused) break;
     stepOnce(k);
@@ -428,6 +448,37 @@ function stepOnce(k: Kitchen) {
     pushFeed(k, "system", `#${o.num} released from deferral`, o.id);
   }
   evaluatePhase(k);
+}
+
+export const LIVE_REVIEW_SECONDS = 30;
+
+/** A live kitchen with no seeded orders, no generated feed and a real-time clock (1 s = 1 s). */
+export function createLiveKitchen(startedAt: number, config: KitchenConfig = DEFAULT_CONFIG): Kitchen {
+  const k = createKitchen({ ...config, initialOrders: [], simMinutesPerSecond: 1 / 60 });
+  k.live = true;
+  k.liveStartedAt = startedAt;
+  k.rushFired = true;
+  k.nextOrderAtSeconds = Number.POSITIVE_INFINITY;
+  k.feed = [];
+  k.lastEvent = { kind: "feed", label: "Live service", detail: "Waiting for the first order", ingredientIds: [] };
+  pushFeed(k, "system", "Live service opened");
+  return k;
+}
+
+/**
+ * Moves a live kitchen's clock forward. Risk is re-evaluated on fixed 30 s boundaries,
+ * so every device that replays the same event log reaches the same state.
+ */
+export function advanceTo(k: Kitchen, seconds: number): Kitchen {
+  if (seconds <= k.clockSeconds) return k;
+  let next = (Math.floor(k.clockSeconds / LIVE_REVIEW_SECONDS) + 1) * LIVE_REVIEW_SECONDS;
+  while (next <= seconds) {
+    k.clockSeconds = next;
+    evaluatePhase(k);
+    next += LIVE_REVIEW_SECONDS;
+  }
+  k.clockSeconds = seconds;
+  return k;
 }
 
 // ---------------------------------------------------------------------------
@@ -675,6 +726,11 @@ export function evaluatePhase(k: Kitchen) {
   if (!worse) return;
   k.phase = "disrupted";
   k.selectedStrategyId = undefined;
+  if (k.live) {
+    const names = p.short.map((s) => k.config.ingredients.find((i) => i.id === s)?.name ?? s);
+    pushFeed(k, "system", `Ripple detected${names.length ? `: ${names.join(", ")} short` : ""}${overloaded ? " · station over capacity" : ""}. Manager review needed.`);
+    return;
+  }
   if (!k.feedPaused) {
     k.feedPaused = true;
     k.autoFrozen = true;

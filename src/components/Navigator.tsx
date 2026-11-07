@@ -1,10 +1,11 @@
 import clsx from "clsx";
-import { AlertTriangle, ChevronRight, History, LayoutGrid, ListOrdered, Package, Search } from "lucide-react";
+import { AlertTriangle, ChevronRight, History, LayoutGrid, ListOrdered, Package, Search, Users } from "lucide-react";
 import { useState } from "react";
 import { useAreas } from "../lib/areas";
 import { pct } from "../lib/ui";
 import { useTwin, type NavTab } from "../store";
-import { Dot, IconTabs, OrderRow, PantryRow } from "./kit";
+import { Dot, IconTabs, OrderRow, PantryRow, type IconTab } from "./kit";
+import { TeamPanel } from "./live/TeamPanel";
 
 function KitchenTree({ filter }: { filter: string }) {
   const { areas } = useAreas();
@@ -27,7 +28,7 @@ function KitchenTree({ filter }: { filter: string }) {
           <div key={a.id} className="pl-4">
             <div
               onClick={() => selectArea(sel === a.id ? null : a.id)}
-              className={clsx("flex cursor-pointer items-center gap-1.5 rounded-[7px] px-1 py-1", sel === a.id ? "bg-accent text-white" : "hover:bg-black/[0.04]")}
+              className={clsx("flex cursor-pointer items-center gap-1.5 rounded-[7px] px-1 py-1", sel === a.id ? "bg-navy text-white" : "hover:bg-navy/[0.04]")}
             >
               <button
                 onClick={(e) => {
@@ -68,7 +69,7 @@ function OrdersList({ filter }: { filter: string }) {
     .filter((o) => !f || `${o.label} ${o.customer} ${o.itemsText}`.toLowerCase().includes(f));
   return (
     <div className="space-y-2">
-      <div className="flex rounded-[8px] bg-black/[0.05] p-0.5">
+      <div className="flex rounded-[8px] bg-navy/[0.05] p-0.5">
         {(["all", "risk", "held"] as const).map((s) => (
           <button key={s} onClick={() => setScope(s)} className={clsx("h-6 flex-1 rounded-[6px] text-[12px] font-bold", scope === s ? "bg-white shadow-sm" : "text-mute")}>
             {s === "all" ? `All ${orders.length}` : s === "risk" ? "At risk" : "Held"}
@@ -93,7 +94,7 @@ function Issues() {
         <div className="space-y-0.5">
           <h4 className="section-label px-1">Kitchen</h4>
           {stations.map((s) => (
-            <button key={s.id} onClick={() => selectArea(s.id)} className="flex w-full items-start gap-2 rounded-[7px] px-1.5 py-1 text-left hover:bg-black/[0.04]">
+            <button key={s.id} onClick={() => selectArea(s.id)} className="flex w-full items-start gap-2 rounded-[7px] px-1.5 py-1 text-left hover:bg-navy/[0.04]">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" style={{ color: s.risk === "critical" ? "#ff3b30" : "#ff9f0a" }} />
               <span>
                 <b>{s.name}</b> at {pct(s.utilization)} of capacity
@@ -101,7 +102,7 @@ function Issues() {
             </button>
           ))}
           {short.map((i) => (
-            <button key={i.id} onClick={() => selectArea("pantry")} className="flex w-full items-start gap-2 rounded-[7px] px-1.5 py-1 text-left hover:bg-black/[0.04]">
+            <button key={i.id} onClick={() => selectArea("pantry")} className="flex w-full items-start gap-2 rounded-[7px] px-1.5 py-1 text-left hover:bg-navy/[0.04]">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-crit" />
               <span>
                 <b>{i.name}</b>: {i.onHand} on hand, {i.need} needed
@@ -132,7 +133,7 @@ function Activity() {
   return (
     <div className="space-y-0.5 font-mono text-[11.5px]">
       {[...feed].reverse().map((f) => (
-        <div key={f.id} className="flex gap-2 rounded-[6px] px-1.5 py-1 hover:bg-black/[0.03]">
+        <div key={f.id} className="flex gap-2 rounded-[6px] px-1.5 py-1 hover:bg-navy/[0.03]">
           <span className="w-10 shrink-0 text-faint tabular-nums">+{f.atSeconds}s</span>
           <span className={clsx("font-sans text-[12px]", f.kind === "rush" && "font-bold text-crit", f.kind === "approve" && "font-bold")}>{f.text}</span>
         </div>
@@ -154,14 +155,23 @@ function Pantry() {
   );
 }
 
-const TITLES: Record<NavTab, string> = { kitchen: "Kitchen", orders: "Orders", pantry: "Pantry", issues: "Issues", activity: "Activity" };
+const TITLES: Record<NavTab, string> = { kitchen: "Kitchen", orders: "Orders", pantry: "Pantry", issues: "Issues", activity: "Activity", team: "Team & devices" };
 
 export function Navigator({ className }: { className?: string }) {
   const nav = useTwin((s) => s.nav);
   const setNav = useTwin((s) => s.setNav);
   const issues = useTwin((s) => s.state.orders.filter((o) => o.risk !== "normal").length + s.state.inventory.filter((i) => i.short).length);
   const short = useTwin((s) => s.state.inventory.filter((i) => i.short).length);
+  const live = useTwin((s) => s.mode === "live");
   const [filter, setFilter] = useState("");
+  const tabs: IconTab<NavTab>[] = [
+    { id: "kitchen", icon: LayoutGrid, label: "Kitchen" },
+    { id: "orders", icon: ListOrdered, label: "Orders" },
+    { id: "pantry", icon: Package, label: "Pantry", badge: short },
+    { id: "issues", icon: AlertTriangle, label: "Issues", badge: issues },
+    { id: "activity", icon: History, label: "Activity" },
+  ];
+  if (live) tabs.push({ id: "team", icon: Users, label: "Team" });
   const filterable = nav === "kitchen" || nav === "orders";
   return (
     <aside className={clsx("sidebar flex min-h-0 flex-col", className)}>
@@ -169,22 +179,16 @@ export function Navigator({ className }: { className?: string }) {
         <IconTabs
           value={nav}
           onChange={setNav}
-          tabs={[
-            { id: "kitchen", icon: LayoutGrid, label: "Kitchen" },
-            { id: "orders", icon: ListOrdered, label: "Orders" },
-            { id: "pantry", icon: Package, label: "Pantry", badge: short },
-            { id: "issues", icon: AlertTriangle, label: "Issues", badge: issues },
-            { id: "activity", icon: History, label: "Activity" },
-          ]}
+          tabs={tabs}
         />
       </div>
       <div className="px-3.5 pb-1 text-[11px] font-extrabold text-mute">{TITLES[nav]}</div>
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-        {nav === "kitchen" ? <KitchenTree filter={filter} /> : nav === "orders" ? <OrdersList filter={filter} /> : nav === "pantry" ? <Pantry /> : nav === "issues" ? <Issues /> : <Activity />}
+        {nav === "kitchen" ? <KitchenTree filter={filter} /> : nav === "orders" ? <OrdersList filter={filter} /> : nav === "pantry" ? <Pantry /> : nav === "issues" ? <Issues /> : nav === "team" && live ? <TeamPanel /> : <Activity />}
       </div>
       {filterable && (
         <div className="border-t border-line p-2">
-          <label className="flex h-7 items-center gap-1.5 rounded-[8px] bg-black/[0.05] px-2">
+          <label className="flex h-7 items-center gap-1.5 rounded-[8px] bg-navy/[0.05] px-2">
             <Search className="size-3.5 text-faint" />
             <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter orders" className="min-w-0 flex-1 bg-transparent font-semibold outline-none placeholder:text-faint" />
           </label>

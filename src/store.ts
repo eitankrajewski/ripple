@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import {
+  advanceTo,
   approveStrategy,
   cancelOrder,
   createKitchen,
+  createLiveKitchen,
   ingestEvent,
   releaseOrder,
   selectStrategy,
@@ -13,12 +15,27 @@ import {
 import { applyScenario, parseScenario, runScenario, type ScenarioResult, type ScenarioSpec } from "./engine/scenario";
 import { deriveState, strategyPlanForApproval } from "./engine/twin";
 import type { DigitalTwinState, Explanation, StrategyId } from "./engine/types";
+import { applyLiveEvent, byOrder, membersFrom, replay } from "./live/apply";
+import { backend, type Presence } from "./live/backend";
+import { can } from "./live/roles";
+import type { LiveAction, LiveEvent, LiveSession, Member, Permission, Role } from "./live/types";
 import { buildPayload, fallbackExplanation, requestExplanation, requestWording, scenarioExplanation, scenarioPayload } from "./lib/explain";
 
 export type Speed = 1 | 2 | 4;
 export type Tab = "inspect" | "plan" | "ask";
-export type NavTab = "kitchen" | "orders" | "pantry" | "issues" | "activity";
+export type NavTab = "kitchen" | "orders" | "pantry" | "issues" | "activity" | "team";
 export type AreaId = "orders" | "pantry" | "prep" | "cook" | "pack" | "pickup";
+export type Mode = "sim" | "live";
+
+export interface LiveState {
+  session: LiveSession | null;
+  members: Member[];
+  presence: Presence;
+  /** Station roles can switch between their station screen and the full twin. */
+  view: "station" | "kitchen";
+}
+
+const EMPTY_LIVE: LiveState = { session: null, members: [], presence: {}, view: "station" };
 
 export interface ScenarioState {
   query: string;
@@ -45,6 +62,9 @@ interface Store {
   nav: NavTab;
   area: AreaId | null;
   scenario: ScenarioState;
+  mode: Mode;
+  live: LiveState;
+  helpOpen: boolean;
 
   step: () => void;
   togglePause: () => void;
@@ -67,9 +87,24 @@ interface Store {
   rephraseScenario: () => Promise<void>;
   applyWhatIf: () => void;
   clearScenario: () => void;
+  setMode: (m: Mode) => void;
+  setHelp: (open: boolean) => void;
+  liveCreate: (kitchenName: string, managerName: string) => Promise<void>;
+  liveJoin: (code: string, name: string, role: Role) => Promise<void>;
+  liveLeave: () => Promise<void>;
+  liveDo: (action: LiveAction) => Promise<boolean>;
+  setLiveView: (v: LiveState["view"]) => void;
 }
 
 let toastSeq = 0;
+
+// Live-mode bookkeeping kept outside React state.
+let simKitchen: Kitchen | null = null;
+let unsubscribe: (() => void) | null = null;
+let liveLog: LiveEvent[] = [];
+const seen = new Set<string>();
+
+const liveSeconds = (session: LiveSession) => Math.max(0, Math.floor((Date.now() - session.kitchen.createdAt) / 1000));
 
 function initial() {
   const kitchen = createKitchen();
@@ -86,12 +121,54 @@ export const useTwin = create<Store>((set, get) => {
     let toast = get().toast;
     let tab = get().tab;
     if (prev.phase !== "disrupted" && state.phase === "disrupted") {
-      toast = { id: ++toastSeq, text: "Ripple detected. Feed paused so you can compare options.", tone: "crit" };
+      const live = get().mode === "live";
+      toast = { id: ++toastSeq, text: live ? "Ripple detected. Review the plans." : "Ripple detected. Feed paused so you can compare options.", tone: "crit" };
       tab = "plan";
     }
     const explanation = prev.phase !== state.phase || extra.previewStrategyId !== undefined ? fallbackExplanation(buildPayload(state, preview ?? undefined)) : get().explanation;
     set({ state, previewStrategyId: preview, toast, tab, explanation, ...extra });
   };
+
+  const toastMsg = (text: string, tone: "ok" | "warn" | "crit" = "warn") => ({ toast: { id: ++toastSeq, text, tone } });
+
+  const receive = (e: LiveEvent) => {
+    const session = get().live.session;
+    if (!session || e.kitchenId !== session.kitchen.id || seen.has(e.id)) return;
+    seen.add(e.id);
+    const last = liveLog[liveLog.length - 1];
+    liveLog.push(e);
+    let kitchen = get().kitchen;
+    if ((!last || byOrder(last, e) <= 0) && kitchen.clockSeconds <= e.at) applyLiveEvent(kitchen, e);
+    else {
+      liveLog.sort(byOrder);
+      kitchen = replay(session.kitchen.createdAt, liveLog);
+    }
+    advanceTo(kitchen, liveSeconds(session));
+    const members = e.action.type === "member_joined" || e.action.type === "member_left" ? membersFrom(liveLog) : get().live.members;
+    set({ kitchen });
+    commit({ live: { ...get().live, members } });
+  };
+
+  const connect = async (session: LiveSession) => {
+    unsubscribe?.();
+    liveLog = (await backend.load(session.kitchen.id)).sort(byOrder);
+    seen.clear();
+    for (const e of liveLog) seen.add(e.id);
+    const kitchen = replay(session.kitchen.createdAt, liveLog);
+    advanceTo(kitchen, liveSeconds(session));
+    set({ kitchen, live: { ...EMPTY_LIVE, session, members: membersFrom(liveLog), view: session.me.role === "manager" ? "kitchen" : "station" } });
+    commit({ tracedOrderId: null, previewStrategyId: null, area: null, tab: "inspect", scenario: EMPTY_SCENARIO });
+    unsubscribe = backend.subscribe(session, receive, (presence) => set({ live: { ...get().live, presence } }));
+  };
+
+  const disconnect = () => {
+    unsubscribe?.();
+    unsubscribe = null;
+    liveLog = [];
+    seen.clear();
+  };
+
+  const isLive = () => get().mode === "live";
 
   return {
     ...initial(),
@@ -105,22 +182,32 @@ export const useTwin = create<Store>((set, get) => {
     nav: "kitchen",
     area: null,
     scenario: EMPTY_SCENARIO,
+    mode: "sim",
+    live: EMPTY_LIVE,
+    helpOpen: false,
 
     step: () => {
-      tick(get().kitchen);
+      const session = get().live.session;
+      if (isLive()) {
+        if (!session) return;
+        advanceTo(get().kitchen, liveSeconds(session));
+      } else tick(get().kitchen);
       commit();
     },
     togglePause: () => {
+      if (isLive()) return;
       const k = get().kitchen;
       setPaused(k, !k.feedPaused);
       commit();
     },
     setSpeed: (speed) => set({ speed }),
     sendRush: () => {
+      if (isLive()) return;
       ingestEvent(get().kitchen, { type: "rush_order" });
       commit({ tracedOrderId: null });
     },
     correctStock: (ingredientId, newStock) => {
+      if (isLive()) return void get().liveDo({ type: "stock_correction", ingredientId, newStock });
       ingestEvent(get().kitchen, { type: "stock_correction", ingredientId, newStock });
       commit();
     },
@@ -132,6 +219,12 @@ export const useTwin = create<Store>((set, get) => {
       const { kitchen, state, previewStrategyId } = get();
       const s = state.strategies.find((x) => x.id === previewStrategyId);
       if (!s) return;
+      if (isLive()) {
+        void get()
+          .liveDo({ type: "approve_plan", plan: strategyPlanForApproval(kitchen, s) })
+          .then((ok) => ok && set({ previewStrategyId: null, tracedOrderId: null, ...toastMsg(`${s.label} approved for the whole team.`, "ok") }));
+        return;
+      }
       approveStrategy(kitchen, strategyPlanForApproval(kitchen, s));
       commit({
         previewStrategyId: null,
@@ -140,10 +233,12 @@ export const useTwin = create<Store>((set, get) => {
       });
     },
     release: (orderId) => {
+      if (isLive()) return void get().liveDo({ type: "release_order", orderId });
       releaseOrder(get().kitchen, orderId);
       commit();
     },
     cancel: (orderId) => {
+      if (isLive()) return void get().liveDo({ type: "cancel_order", orderId });
       cancelOrder(get().kitchen, orderId);
       commit({ tracedOrderId: null });
     },
@@ -156,6 +251,7 @@ export const useTwin = create<Store>((set, get) => {
       set({ explanation, explaining: false });
     },
     reset: () => {
+      if (isLive()) return;
       set({ ...initial(), speed: 1, tracedOrderId: null, focusedNodeId: null, previewStrategyId: null, toast: null, tab: "inspect", area: null, scenario: EMPTY_SCENARIO });
     },
     setTab: (tab) => set({ tab }),
@@ -180,10 +276,57 @@ export const useTwin = create<Store>((set, get) => {
     },
     applyWhatIf: () => {
       const sc = get().scenario;
-      if (!sc.spec || !sc.result) return;
+      if (!sc.spec || !sc.result || isLive()) return;
       applyScenario(get().kitchen, sc.spec);
       commit({ tracedOrderId: null, tab: "plan", scenario: EMPTY_SCENARIO, toast: { id: ++toastSeq, text: `Added to the twin: ${sc.result.title}`, tone: "warn" } });
     },
     clearScenario: () => set({ scenario: EMPTY_SCENARIO }),
+
+    setHelp: (helpOpen) => set({ helpOpen }),
+    setMode: (mode) => {
+      if (mode === get().mode) return;
+      const reset = { tracedOrderId: null, previewStrategyId: null, area: null, tab: "inspect" as Tab, scenario: EMPTY_SCENARIO, toast: null };
+      if (mode === "live") {
+        simKitchen = get().kitchen;
+        set({ mode, kitchen: createLiveKitchen(Date.now()), live: EMPTY_LIVE, ...reset });
+        commit();
+        const session = backend.resume();
+        if (session) void connect(session);
+      } else {
+        disconnect();
+        set({ mode, kitchen: simKitchen ?? createKitchen(), live: EMPTY_LIVE, ...reset });
+        commit();
+      }
+    },
+    liveCreate: async (kitchenName, managerName) => {
+      await connect(await backend.createKitchen(kitchenName, managerName));
+    },
+    liveJoin: async (code, name, role) => {
+      await connect(await backend.joinKitchen(code, name, role));
+    },
+    liveLeave: async () => {
+      const session = get().live.session;
+      if (session) await backend.leave(session);
+      disconnect();
+      set({ kitchen: createLiveKitchen(Date.now()), live: EMPTY_LIVE, tracedOrderId: null, area: null });
+      commit();
+    },
+    liveDo: async (action) => {
+      const session = get().live.session;
+      if (!session) return false;
+      try {
+        receive(await backend.publish(session, action));
+        return true;
+      } catch (err) {
+        set(toastMsg(err instanceof Error ? err.message : "Couldn't send that update.", "crit"));
+        return false;
+      }
+    },
+    setLiveView: (view) => set({ live: { ...get().live, view } }),
   };
 });
+
+/** In simulation everything is allowed; in live mode it depends on the signed-in role. */
+export function useCan(permission: Permission) {
+  return useTwin((s) => s.mode === "sim" || (!!s.live.session && can(s.live.session.me.role, permission)));
+}

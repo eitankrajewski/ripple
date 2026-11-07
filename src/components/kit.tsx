@@ -3,7 +3,7 @@ import { Check, Loader2, Pencil, Sparkles } from "lucide-react";
 import { useState, type ComponentType, type ReactNode } from "react";
 import type { Explanation, InventoryView, OrderView, RiskLevel } from "../engine/types";
 import { minutes, RISK_HEX, RISK_LABEL, statusLabel } from "../lib/ui";
-import { useTwin } from "../store";
+import { useCan, useTwin } from "../store";
 
 export function Dot({ risk, pulse, className }: { risk: RiskLevel; pulse?: boolean; className?: string }) {
   return <span className={clsx("inline-block size-2 shrink-0 rounded-full", pulse && risk === "critical" && "pulse-dot", className)} style={{ background: RISK_HEX[risk] }} />;
@@ -11,7 +11,7 @@ export function Dot({ risk, pulse, className }: { risk: RiskLevel; pulse?: boole
 
 export function RiskChip({ risk, label }: { risk: RiskLevel; label?: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11.5px] font-bold text-ink">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-navy/[0.05] px-2 py-0.5 text-[11.5px] font-bold text-ink">
       <Dot risk={risk} />
       {label ?? RISK_LABEL[risk]}
     </span>
@@ -19,7 +19,9 @@ export function RiskChip({ risk, label }: { risk: RiskLevel; label?: string }) {
 }
 
 export function SimBadge() {
-  return <span className="rounded-full bg-black/[0.05] px-2 py-0.5 text-[10.5px] font-bold text-mute">Simulated</span>;
+  const live = useTwin((s) => s.mode === "live");
+  if (live) return <span className="rounded-full bg-ok/12 px-2 py-0.5 text-[10.5px] font-bold text-[#1f8a3a]">Live</span>;
+  return <span className="rounded-full bg-navy/[0.05] px-2 py-0.5 text-[10.5px] font-bold text-mute">Simulated</span>;
 }
 
 export interface IconTab<T extends string> {
@@ -32,7 +34,7 @@ export interface IconTab<T extends string> {
 /* Xcode-style navigator selector: icons in a capsule, the active one filled. */
 export function IconTabs<T extends string>({ tabs, value, onChange }: { tabs: IconTab<T>[]; value: T; onChange: (t: T) => void }) {
   return (
-    <div className="flex items-center justify-between rounded-full bg-black/[0.05] p-1">
+    <div className="flex items-center justify-between rounded-full bg-navy/[0.05] p-1">
       {tabs.map((t) => {
         const on = t.id === value;
         return (
@@ -41,7 +43,7 @@ export function IconTabs<T extends string>({ tabs, value, onChange }: { tabs: Ic
             onClick={() => onChange(t.id)}
             title={t.label}
             aria-label={t.label}
-            className={clsx("relative flex h-8 flex-1 items-center justify-center rounded-full transition-colors", on ? "bg-accent text-white shadow-sm" : "text-mute hover:text-ink")}
+            className={clsx("relative flex h-8 flex-1 items-center justify-center rounded-full transition-colors", on ? "bg-navy text-white shadow-sm" : "text-mute hover:text-ink")}
           >
             <t.icon className="size-[17px]" />
             {!!t.badge && <span className="absolute top-0.5 right-[18%] min-w-3.5 rounded-full bg-crit px-1 text-[9.5px] leading-3.5 font-extrabold text-white">{t.badge}</span>}
@@ -83,8 +85,8 @@ export function Stat({ label, value, before, format = String, lowerBetter = true
 export function LoadBar({ value, before }: { value: number; before?: number }) {
   const c = value > 1 ? RISK_HEX.critical : value >= 0.85 ? RISK_HEX.warning : "#1d1d1f";
   return (
-    <div className="relative h-1.5 overflow-hidden rounded-full bg-black/[0.07]">
-      {before !== undefined && <div className="absolute inset-y-0 left-0 rounded-full bg-black/10" style={{ width: `${Math.min(100, before * 100)}%` }} />}
+    <div className="relative h-1.5 overflow-hidden rounded-full bg-navy/[0.07]">
+      {before !== undefined && <div className="absolute inset-y-0 left-0 rounded-full bg-navy/10" style={{ width: `${Math.min(100, before * 100)}%` }} />}
       <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, value * 100)}%`, background: c }} />
     </div>
   );
@@ -114,11 +116,12 @@ export function Wording({ e, loading, onRephrase }: { e: Explanation; loading: b
 export function OrderRow({ o, compact }: { o: OrderView; compact?: boolean }) {
   const traced = useTwin((s) => s.tracedOrderId === o.id);
   const { trace, release, cancel } = useTwin.getState();
-  const held = o.status === "held" || o.status === "deferred";
+  const canHold = useCan("hold_orders");
+  const held = (o.status === "held" || o.status === "deferred") && canHold;
   return (
     <div
       onClick={() => trace(traced ? null : o.id)}
-      className={clsx("cursor-pointer rounded-[8px] px-2 py-1.5 transition-colors", traced ? "bg-accent text-white" : "hover:bg-black/[0.04]")}
+      className={clsx("cursor-pointer rounded-[8px] px-2 py-1.5 transition-colors", traced ? "bg-navy text-white" : "hover:bg-navy/[0.04]")}
     >
       <div className="flex items-center gap-2">
         <Dot risk={o.risk} className={traced ? "ring-2 ring-white" : undefined} />
@@ -152,6 +155,7 @@ export function OrderRow({ o, compact }: { o: OrderView; compact?: boolean }) {
 
 export function PantryRow({ i }: { i: InventoryView }) {
   const correct = useTwin((s) => s.correctStock);
+  const canEdit = useCan("correct_stock");
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(String(i.onHand));
   const ratio = i.need === 0 ? 0 : Math.min(1, i.need / Math.max(1, i.onHand));
@@ -161,7 +165,7 @@ export function PantryRow({ i }: { i: InventoryView }) {
     setEditing(false);
   };
   return (
-    <div className="rounded-[8px] px-2 py-1.5 hover:bg-black/[0.03]">
+    <div className="rounded-[8px] px-2 py-1.5 hover:bg-navy/[0.03]">
       <div className="flex items-center gap-2">
         <Dot risk={i.risk} />
         <span className="flex-1 truncate font-bold">{i.name}</span>
@@ -180,16 +184,17 @@ export function PantryRow({ i }: { i: InventoryView }) {
           </form>
         ) : (
           <button
+            disabled={!canEdit}
             onClick={() => {
               setVal(String(i.onHand));
               setEditing(true);
             }}
-            className="group flex items-center gap-1 font-bold tabular-nums"
-            title="Recount stock"
+            className="group flex items-center gap-1 font-bold tabular-nums disabled:cursor-default"
+            title={canEdit ? "Recount stock" : "Only managers and prep can recount stock"}
           >
             {i.onHand}
             <span className="font-semibold text-faint">/ {i.need}</span>
-            <Pencil className="size-3 text-faint group-hover:text-accent" />
+            {canEdit && <Pencil className="size-3 text-faint group-hover:text-accent" />}
           </button>
         )}
       </div>

@@ -10,7 +10,7 @@ export interface OrderItem {
 }
 
 export interface OrderEvent {
-  type: "order_received" | "rush_order" | "stock_correction" | "task_done";
+  type: "order_received" | "rush_order" | "stock_correction" | "task_done" | "picked_up";
   orderId?: string;
   source?: OrderSource;
   items?: OrderItem[];
@@ -18,6 +18,10 @@ export interface OrderEvent {
   ingredientId?: string;
   newStock?: number;
   customer?: string;
+  /** For task_done: only complete this station if it is the order's current one. */
+  station?: StationId;
+  /** Who reported the event (live mode). */
+  by?: string;
 }
 
 export interface RippleNode {

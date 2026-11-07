@@ -20,6 +20,19 @@ All outcomes are **simulated projections**. The order feed is simulated; there i
 - **Controls**: play / pause, 1×/2×/4× speed, *Rush order*, and *Reset* to the exact initial seed.
 - **AI wording**: optional Gemini rephrasing of the deterministic explanations. Gemini never calculates anything; without a key the deterministic text is used.
 
+## Live mode (preview)
+
+Switch the toolbar from **Simulation** to **Live** to run the real kitchen:
+
+- The **manager** opens a kitchen and gets a 6-character join code.
+- **Other devices** (Prep, Line cook, Expo / Pack, Host) join with the code and a role.
+- Station devices get a focused ticket screen. Tapping **Prep done → Cook** moves the order to the next stage on every screen.
+- The host and manager enter orders with **New order**.
+
+In this build, kitchens are stored in the browser, so try it with two tabs on one computer. See [`docs/live-mode.md`](docs/live-mode.md) for the roles, permissions, data model and the plan for a hosted backend (Supabase or Firebase) so real phones and tablets can connect.
+
+Press **?** in the toolbar for an explanation of every number and how to get around.
+
 ## Run locally
 
 Requires Node.js 22.12+ (or 20.19+).
@@ -37,7 +50,9 @@ Optional AI wording: create `.env.local` with `GEMINI_API_KEY=...` (never commit
 
 ```
 src/engine/      seed data, simulation (ingestEvent, tick, project), strategies, what-if scenarios, tests
-src/components/  Kitchen3D (Three.js scene), Toolbar, Navigator, Inspector, Plan / Ask AI tabs, shared kit
+src/components/  Kitchen3D (Three.js scene), Toolbar + AlertBar, Navigator, Inspector, Plan / Ask AI tabs, HelpSheet, shared kit
+src/components/live/  sign-in (LiveGate), StationScreen, NewOrderForm, TeamPanel
+src/live/        roles & permissions, live event types, event replay, LiveBackend (local preview implementation)
 src/lib/areas.ts  derives per-area status shared by the 3D scene and the inspector
 src/store.ts  zustand store wiring the engine to the UI
 api/explain.ts   Vercel serverless function for optional Gemini wording

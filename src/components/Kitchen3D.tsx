@@ -10,17 +10,17 @@ import { pct, RISK_HEX } from "../lib/ui";
 import { useTwin } from "../store";
 
 const C = {
-  floor: "#eceef1",
-  wall: "#f7f7f9",
-  steel: "#d9dce1",
+  floor: "#e7ebf2",
+  wall: "#f3f5f9",
+  steel: "#d6dbe4",
   steelDark: "#a3a8b0",
   dark: "#50545c",
   white: "#fbfbfc",
   wood: "#dcc8a8",
   box: "#d8c3a0",
   bag: "#ece3d3",
-  accent: "#007aff",
-  muted: "#c3c7cd",
+  accent: "#2f6fed",
+  muted: "#bfc7d4",
 };
 
 const POS: Record<AreaId, [number, number]> = {
@@ -316,7 +316,7 @@ function Room() {
   return (
     <group>
       <Box p={[0, -0.06, -0.2]} s={[22, 0.12, 13]} c={C.floor} r={0.05} />
-      <Grid position={[0, 0.002, -0.2]} args={[22, 13]} cellSize={1} cellThickness={0.6} cellColor="#dcdfe3" sectionSize={4} sectionThickness={0.9} sectionColor="#d0d3d8" fadeDistance={60} infiniteGrid={false} />
+      <Grid position={[0, 0.002, -0.2]} args={[22, 13]} cellSize={1} cellThickness={0.6} cellColor="#d7dce6" sectionSize={4} sectionThickness={0.9} sectionColor="#c9d0dd" fadeDistance={60} infiniteGrid={false} />
       <Box p={[0, 1.2, -6.65]} s={[22, 2.4, 0.18]} c={C.wall} r={0.03} />
       <Box p={[-10.95, 1.2, -0.2]} s={[0.18, 2.4, 13]} c={C.wall} r={0.03} />
     </group>
@@ -378,7 +378,7 @@ function Scene({ controls, insets }: { controls: React.RefObject<CameraControls 
   return (
     <>
       <ambientLight intensity={0.75} />
-      <hemisphereLight args={["#ffffff", "#dfe3ea", 0.6]} />
+      <hemisphereLight args={["#ffffff", "#d5dceb", 0.6]} />
       <directionalLight position={[6, 14, 8]} intensity={1.5} castShadow shadow-mapSize={[2048, 2048]} shadow-camera-left={-14} shadow-camera-right={14} shadow-camera-top={10} shadow-camera-bottom={-10} shadow-bias={-0.0004} />
       <Room />
       {FLOW.map(([a, b]) => {
@@ -386,7 +386,7 @@ function Scene({ controls, insets }: { controls: React.RefObject<CameraControls 
         const inTrace = traced && i <= traceEnd;
         const r = RANK[byId[a].risk] <= RANK[byId[b].risk] ? byId[a].risk : byId[b].risk;
         const color = inTrace ? C.accent : r === "normal" ? C.muted : RISK_HEX[r];
-        return <Lane key={`${a}-${b}`} offset={i * 0.37} from={a} to={b} color={traced && !inTrace ? "#dfe1e5" : color} width={inTrace || r !== "normal" ? 4 : 2.5} flowing={!paused} speed={speed} />;
+        return <Lane key={`${a}-${b}`} offset={i * 0.37} from={a} to={b} color={traced && !inTrace ? "#dce1ea" : color} width={inTrace || r !== "normal" ? 4 : 2.5} flowing={!paused} speed={speed} />;
       })}
       {areas.map((a) => (
         <AreaNode
@@ -449,7 +449,7 @@ function Markers({ register }: { register: (id: AreaId, el: HTMLElement | null) 
           onClick={onSelect}
           className={clsx(
             "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-bold whitespace-nowrap shadow-[0_4px_14px_-6px_rgba(0,0,0,0.25)] backdrop-blur-md transition-all select-none",
-            selected ? "border-transparent bg-accent text-white" : "border-black/10 bg-white/90 text-ink hover:bg-white",
+            selected ? "border-transparent bg-navy text-white" : "border-navy/10 bg-white/90 text-ink hover:bg-white",
             dim && "opacity-40",
           )}
         >
@@ -488,11 +488,23 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
   };
 
   return (
-    <div className="relative h-full w-full bg-[radial-gradient(120%_90%_at_50%_0%,#fbfbfc,#e9ebef)]">
+    <div className="relative h-full w-full bg-[radial-gradient(120%_90%_at_50%_0%,#f9fbfe,#dfe5f0)]">
       <GLBoundary>
         <Canvas shadows dpr={[1, 2]} camera={{ position: [...HOME.pos], fov: 34 }} gl={{ antialias: true, alpha: true }}>
-          <fog attach="fog" args={["#eef0f3", 60, 110]} />
-          <CameraControls ref={controls} minDistance={5} maxDistance={64} maxPolarAngle={Math.PI / 2.25} smoothTime={0.45} />
+          <fog attach="fog" args={["#e8ecf4", 60, 110]} />
+          <CameraControls
+            ref={controls}
+            minDistance={4}
+            maxDistance={64}
+            maxPolarAngle={Math.PI / 2.25}
+            smoothTime={0.25}
+            draggingSmoothTime={0.06}
+            azimuthRotateSpeed={1.7}
+            polarRotateSpeed={1.5}
+            dollySpeed={2.4}
+            truckSpeed={2.6}
+            dollyToCursor
+          />
           <Scene controls={controls} insets={insets} />
           <MarkerTracker place={place} />
         </Canvas>
@@ -503,7 +515,7 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
           <button className="tbtn rounded-full!" onClick={() => selectArea(null)} title="Whole kitchen">
             <Scan className="size-4" />
           </button>
-          <span className="mx-1 h-4 w-px bg-black/10" />
+          <span className="mx-1 h-4 w-px bg-navy/10" />
           <button className="tbtn rounded-full!" onClick={() => step(-1)} aria-label="Previous area">
             <ChevronLeft className="size-4" />
           </button>
@@ -511,7 +523,7 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
           <button className="tbtn rounded-full!" onClick={() => step(1)} aria-label="Next area">
             <ChevronRight className="size-4" />
           </button>
-          <span className="mx-1 h-4 w-px bg-black/10" />
+          <span className="mx-1 h-4 w-px bg-navy/10" />
           <button className="tbtn rounded-full!" onClick={() => void controls.current?.dolly(3, true)} aria-label="Zoom in">
             <Plus className="size-4" />
           </button>

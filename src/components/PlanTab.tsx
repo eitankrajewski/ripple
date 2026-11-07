@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { Check, ShieldCheck } from "lucide-react";
 import { pct, score } from "../lib/ui";
-import { useTwin } from "../store";
+import { useCan, useTwin } from "../store";
 import { Section, SimBadge, Stat, Wording } from "./kit";
 
 export function PlanTab() {
@@ -10,6 +10,8 @@ export function PlanTab() {
   const explanation = useTwin((s) => s.explanation);
   const explaining = useTwin((s) => s.explaining);
   const { choose, approve, explainWithAI, setTab } = useTwin.getState();
+  const canApprove = useCan("approve_plan");
+  const live = useTwin((s) => s.mode === "live");
 
   if (state.phase !== "disrupted") {
     return (
@@ -85,11 +87,17 @@ export function PlanTab() {
         </div>
       </Section>
 
-      <button onClick={approve} disabled={!selected} className="btn btn-primary h-9! w-full">
-        <ShieldCheck className="size-4" />
-        {selected ? `Approve ${selected.label}` : "Select a response to approve"}
-      </button>
-      <p className="-mt-2 text-center text-[11.5px] text-faint">Nothing changes in the kitchen until you approve.</p>
+      {canApprove ? (
+        <>
+          <button onClick={approve} disabled={!selected} className="btn btn-navy h-9! w-full">
+            <ShieldCheck className="size-4" />
+            {selected ? `Approve ${selected.label}` : "Select a response to approve"}
+          </button>
+          <p className="-mt-2 text-center text-[11.5px] text-faint">{live ? "Approving updates every device in the kitchen." : "Nothing changes in the kitchen until you approve."}</p>
+        </>
+      ) : (
+        <p className="rounded-[8px] bg-navy/[0.05] px-3 py-2 text-center text-[12px] font-semibold text-mute">Only the manager can approve a plan. You can still preview the options.</p>
+      )}
       {selected && <Wording e={explanation} loading={explaining} onRephrase={explainWithAI} />}
     </div>
   );

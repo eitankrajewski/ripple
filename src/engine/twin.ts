@@ -158,7 +158,7 @@ export function buildGraph(k: Kitchen, p: Projection): { nodes: RippleNode[]; ed
     id: "outcome",
     type: "outcome",
     label: "Pickup promise",
-    detail: late > 0 ? `${late} of ${total} orders projected late` : p.metrics.ordersAtRisk ? `${p.metrics.ordersAtRisk} tight, none late` : `All ${total} pickups on time`,
+    detail: late > 0 ? `${late} of ${total} orders projected late` : p.metrics.ordersAtRisk ? `${p.metrics.ordersAtRisk} tight, none late` : total ? `All ${total} pickups on time` : "No pickups due",
     risk: outcomeRisk,
     column: 5,
     row: midRow(1, 0) - 0.5,
@@ -412,7 +412,10 @@ export function deriveState(k: Kitchen): DigitalTwinState {
   const glance = buildGlance(k, p, inventory, stations);
   const secondsToRush = k.rushFired ? null : Math.max(0, cfg.rushAtSeconds - k.clockSeconds);
   const clockMin = 18 * 60 + 30 + Math.floor(now);
-  const serviceClock = `${((Math.floor(clockMin / 60) + 11) % 12) + 1}:${String(clockMin % 60).padStart(2, "0")} PM`;
+  const serviceClock =
+    k.live && k.liveStartedAt !== undefined
+      ? new Date(k.liveStartedAt + k.clockSeconds * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : `${((Math.floor(clockMin / 60) + 11) % 12) + 1}:${String(clockMin % 60).padStart(2, "0")} PM`;
 
   return {
     scenarioId: cfg.scenarioId,

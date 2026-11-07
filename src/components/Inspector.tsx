@@ -198,7 +198,7 @@ function NoSelection() {
       <p className="mt-1 max-w-[230px] text-faint">Click a station in the 3D kitchen, or pick one below, to see what’s happening there.</p>
       <div className="mt-5 w-full space-y-0.5 text-left">
         {areas.map((a) => (
-          <button key={a.id} onClick={() => selectArea(a.id)} className="flex w-full items-center gap-2 rounded-[7px] px-2 py-1.5 hover:bg-black/[0.04]">
+          <button key={a.id} onClick={() => selectArea(a.id)} className="flex w-full items-center gap-2 rounded-[7px] px-2 py-1.5 hover:bg-navy/[0.04]">
             <Dot risk={a.risk} />
             <span className="font-bold">{a.name}</span>
             <span className="ml-auto truncate text-faint">{a.summary}</span>
