@@ -77,7 +77,7 @@ function ComponentTicket({ o, station, primary }: { o: OrderView; station: Stati
                     haptic("tick");
                     setPicked(on ? picked.filter((p) => p !== i.menuItemId) : [...picked, i.menuItemId]);
                   }}
-                  className={clsx("flex min-h-11 w-full items-center gap-3 rounded-[10px] border px-3 text-left text-[15px] font-semibold transition-colors", on ? "border-ok/40 bg-ok/10" : "border-navy/12 bg-white", !split && "border-transparent! px-0")}
+                  className={clsx("flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-left text-[15px] font-semibold transition-all", on ? "bg-ok/10 shadow-[0_0_0_1px_rgba(52,199,89,0.35)]" : "bg-white shadow-[var(--shadow-btn)]", !split && "bg-transparent! px-0 shadow-none!")}
                 >
                   {split && <span className={clsx("flex size-6 shrink-0 items-center justify-center rounded-[7px] border-2", on ? "border-ok bg-ok text-white" : "border-navy/25")}>{on && <Check className="size-4" strokeWidth={3} />}</span>}
                   <span className="font-extrabold tabular-nums">{i.qty}×</span>
@@ -126,7 +126,7 @@ function Batches({ orders, station }: { orders: OrderView[]; station: StationId 
   const shared = [...groups].filter(([, g]) => new Set(g.map((x) => x.o.id)).size > 1);
   if (!shared.length) return null;
   return (
-    <section className="mb-3 rounded-[12px] border border-navy/12 bg-navy/[0.035] p-3">
+    <section className="mb-3 rounded-[12px] bg-white/80 p-3 shadow-[var(--shadow-card)]">
       <div className="mb-2 flex items-center gap-2 text-[13px] font-extrabold">
         <Layers className="size-4 text-navy" /> Do together
         <span className="font-semibold text-faint">same component in several orders</span>
@@ -193,7 +193,7 @@ function Items({ o, checklist }: { o: OrderView; checklist?: boolean }) {
                 haptic("tick");
                 void act({ type: "pack_item", orderId: o.id, menuItemId: i.menuItemId, checked: !packed });
               }}
-              className={clsx("flex min-h-11 w-full items-center gap-3 rounded-[10px] border px-3 text-left text-[15px] font-semibold transition-colors", packed ? "border-ok/40 bg-ok/10" : "border-navy/12 bg-white")}
+              className={clsx("flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-left text-[15px] font-semibold transition-all", packed ? "bg-ok/10 shadow-[0_0_0_1px_rgba(52,199,89,0.35)]" : "bg-white shadow-[var(--shadow-btn)]")}
             >
               <span className={clsx("flex size-6 shrink-0 items-center justify-center rounded-[7px] border-2", packed ? "border-ok bg-ok text-white" : "border-navy/25")}>{packed && <Check className="size-4" strokeWidth={3} />}</span>
               <span className="font-extrabold tabular-nums">{i.qty}×</span>

@@ -106,8 +106,9 @@ export function Wording({ e, loading, onRephrase }: { e: Explanation; loading: b
       <p>
         <span className="font-bold">Trade-off:</span> {e.tradeoff}
       </p>
+      {e.aiNote && <p className="rounded-[8px] bg-warn/10 px-2 py-1.5 text-[12px] text-mute">{e.aiNote}</p>}
       <button onClick={onRephrase} disabled={loading} className="btn mt-1 text-ai">
-        {loading ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} Rephrase with AI
+        {loading ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} {loading ? "Rewording…" : e.source === "gemini" ? "Reword again" : "Rephrase with AI"}
       </button>
     </div>
   );

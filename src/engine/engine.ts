@@ -11,10 +11,13 @@ import type {
   Phase,
   RiskLevel,
   StationId,
+  StationKind,
+  StationPose,
   StrategyId,
 } from "./types";
 
 export const STATION_IDS: StationId[] = ["prep", "cook", "pack"];
+const BASE_KINDS: StationKind[] = ["orders", "pantry", "prep", "cook", "pack", "pickup"];
 
 export interface SimOrder {
   id: string;
@@ -60,6 +63,7 @@ export interface Kitchen {
   config: KitchenConfig;
   /** Extra stations the manager placed in the 3D kitchen; each one adds a cook to its station. */
   layout: PlacedStation[];
+  basePoses: Partial<Record<StationKind, StationPose>>;
   rng: number;
   clockSeconds: number;
   nextOrderAtSeconds: number;
@@ -154,6 +158,7 @@ export function createKitchen(config: KitchenConfig = DEFAULT_CONFIG): Kitchen {
   const k: Kitchen = {
     config,
     layout: [],
+    basePoses: {},
     rng: config.seed,
     clockSeconds: 0,
     nextOrderAtSeconds: 0,
@@ -372,6 +377,29 @@ export function ingestEvent(k: Kitchen, event: OrderEvent): Kitchen {
       if ((STATION_IDS as string[]).includes(p.kind))
         k.config = { ...k.config, stations: k.config.stations.map((s) => (s.id === p.kind ? { ...s, staff: s.staff + 1 } : s)) };
       pushFeed(k, "system", `New ${p.kind} station added${event.by ? ` · ${event.by}` : ""}`);
+      break;
+    }
+    case "station_moved": {
+      const id = event.placedId;
+      const pose = event.pose;
+      if (!id || !pose || ![pose.x, pose.z, pose.rot].every(Number.isFinite)) break;
+      if (k.layout.some((x) => x.id === id)) k.layout = k.layout.map((x) => (x.id === id ? { ...x, x: pose.x, z: pose.z, rot: pose.rot } : x));
+      else if (BASE_KINDS.includes(id as StationKind)) k.basePoses = { ...k.basePoses, [id]: { ...pose } };
+      break;
+    }
+    case "staff_moved": {
+      const from = k.config.stations.find((s) => s.id === event.fromStation);
+      const to = k.config.stations.find((s) => s.id === event.toStation);
+      if (!from || !to || from === to || from.staff <= 1) break;
+      k.config = { ...k.config, stations: k.config.stations.map((s) => (s.id === from.id ? { ...s, staff: s.staff - 1 } : s.id === to.id ? { ...s, staff: s.staff + 1 } : s)) };
+      pushFeed(k, "system", `One person moved from ${from.name} to ${to.name}${event.by ? ` · ${event.by}` : ""}`);
+      break;
+    }
+    case "hold_order": {
+      const o = k.orders.find((x) => x.id === event.orderId);
+      if (!o || o.held || o.consumed) break;
+      o.held = true;
+      pushFeed(k, "system", `#${o.num} held${event.by ? ` · ${event.by}` : ""}`, o.id);
       break;
     }
     case "station_removed": {

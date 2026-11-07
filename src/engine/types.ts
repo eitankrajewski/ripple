@@ -10,6 +10,13 @@ export interface PlacedStation {
   kind: StationKind;
   x: number;
   z: number;
+  /** Rotation around the vertical axis, radians. */
+  rot?: number;
+}
+export interface StationPose {
+  x: number;
+  z: number;
+  rot: number;
 }
 
 export interface NewMenuItem {
@@ -36,10 +43,15 @@ export interface OrderItem {
 export interface OrderEvent {
   type:
     | "order_received" | "rush_order" | "stock_correction" | "task_done" | "picked_up" | "move_order" | "pack_item" | "dasher_update" | "handoff_mismatch"
-    | "item_done" | "station_added" | "station_removed" | "menu_item_added" | "ingredient_added";
+    | "item_done" | "station_added" | "station_removed" | "menu_item_added" | "ingredient_added" | "station_moved" | "staff_moved" | "hold_order";
   /** Layout changes (station_added / station_removed). */
   placed?: PlacedStation;
   placedId?: string;
+  /** For station_moved. */
+  pose?: StationPose;
+  /** For staff_moved. */
+  fromStation?: StationId;
+  toStation?: StationId;
   /** For menu_item_added. */
   menuItem?: NewMenuItem;
   /** For ingredient_added. */
@@ -113,6 +125,8 @@ export interface Explanation {
   recommendationReason: string;
   tradeoff: string;
   source: "gemini" | "fallback";
+  /** Why AI wording wasn't used, shown under the explanation after a rephrase attempt. */
+  aiNote?: string;
 }
 
 export type OrderStatus = "queued" | "prepping" | "cooking" | "packing" | "ready" | "held" | "deferred" | "blocked";
@@ -177,6 +191,8 @@ export interface FeedEntry {
 
 export interface DigitalTwinState {
   layout: PlacedStation[];
+  /** Where the built-in stations stand when a manager has moved or rotated them. */
+  basePoses: Partial<Record<StationKind, StationPose>>;
   menu: NewMenuItem[];
   scenarioId: string;
   phase: Phase;

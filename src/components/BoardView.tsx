@@ -18,7 +18,7 @@ function MoveMenu({ o, onMove }: { o: OrderView; onMove: (to: DropTarget) => voi
         <MoreHorizontal className="size-4 text-mute" />
       </button>
       {open && (
-        <div className="absolute top-8 right-0 z-30 w-40 rounded-[10px] border border-navy/10 bg-white p-1 shadow-lg">
+        <div className="absolute top-8 right-0 z-30 w-40 rounded-[10px] bg-white p-1 shadow-[0_0_0_0.5px_rgba(22,36,71,0.1),0_12px_30px_-10px_rgba(16,24,40,0.3)]">
           <div className="px-2 py-1 text-[11px] font-bold text-faint">Move to</div>
           {COLUMNS.map((c) => (
             <button key={c} disabled={c === here} onClick={() => (onMove(c), setOpen(false))} className="block w-full rounded-[7px] px-2 py-1.5 text-left font-bold hover:bg-navy/[0.05] disabled:text-faint">

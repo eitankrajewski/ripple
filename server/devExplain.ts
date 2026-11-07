@@ -23,14 +23,15 @@ export function explainDevMiddleware(): Plugin {
         req.on("data", (c) => (body += c));
         req.on("end", async () => {
           res.setHeader("Content-Type", "application/json");
+          let payload: unknown = {};
           try {
-            const result = await explainWithGemini(JSON.parse(body || "{}"));
-            res.statusCode = result ? 200 : 503;
-            res.end(JSON.stringify(result ?? { error: "explanation unavailable" }));
+            payload = JSON.parse(body || "{}");
           } catch {
-            res.statusCode = 503;
-            res.end(JSON.stringify({ error: "explanation unavailable" }));
+            // empty payload
           }
+          const out = await explainWithGemini(payload);
+          res.statusCode = out.ok ? 200 : 503;
+          res.end(JSON.stringify(out.ok ? out.result : { error: out.reason }));
         });
       });
     },

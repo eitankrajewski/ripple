@@ -56,6 +56,15 @@ export function applyAction(k: Kitchen, a: LiveAction, by?: string) {
     case "approve_plan":
       approveStrategy(k, a.plan);
       break;
+    case "station_moved":
+      ingestEvent(k, { type: "station_moved", placedId: a.id, pose: { x: a.x, z: a.z, rot: a.rot }, by });
+      break;
+    case "staff_moved":
+      ingestEvent(k, { type: "staff_moved", fromStation: a.from, toStation: a.to, by });
+      break;
+    case "hold_order":
+      ingestEvent(k, { type: "hold_order", orderId: a.orderId, by });
+      break;
     case "release_order":
       releaseOrder(k, a.orderId);
       break;

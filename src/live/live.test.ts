@@ -172,4 +172,25 @@ describe("item-level routing, layout and menu", () => {
     expect(k.inventory.avocado).toBe(12);
     expect(k.config.menu.find((m) => m.id === "wings")!.ingredients).toEqual({ avocado: 1 });
   });
+
+  it("managers move and rotate stations, shift staff and hold orders", () => {
+    expect(allowed("prep", { type: "station_moved", id: "cook", x: 0, z: 0, rot: 0 })).toBe(false);
+    expect(allowed("cook", { type: "staff_moved", from: "prep", to: "cook" })).toBe(false);
+    const station = { id: "s1", kind: "cook" as const, x: 1, z: 2 };
+    const base = replay(START, []).config.stations;
+    const k = replay(START, [
+      ev(1, manager, { type: "station_added", station }),
+      ev(2, manager, { type: "station_moved", id: "s1", x: 4, z: -2, rot: Math.PI / 2 }),
+      ev(3, manager, { type: "station_moved", id: "pack", x: 6, z: 3, rot: Math.PI }),
+      ev(4, manager, { type: "staff_moved", from: "prep", to: "pack" }),
+      ev(5, manager, order),
+    ]);
+    expect(k.layout[0]).toMatchObject({ x: 4, z: -2, rot: Math.PI / 2 });
+    expect(k.basePoses.pack).toEqual({ x: 6, z: 3, rot: Math.PI });
+    const staff = (id: string) => k.config.stations.find((s) => s.id === id)!.staff;
+    expect(staff("prep")).toBe(base.find((s) => s.id === "prep")!.staff - 1);
+    expect(staff("pack")).toBe(base.find((s) => s.id === "pack")!.staff + 1);
+    const held = replay(START, [ev(1, manager, order), ev(2, manager, { type: "hold_order", orderId: k.orders[0].id })]);
+    expect(deriveState(held).orders[0].status).toBe("held");
+  });
 });

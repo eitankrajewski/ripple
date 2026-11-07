@@ -1,11 +1,11 @@
-import { CameraControls, Grid, Html, Line, RoundedBox } from "@react-three/drei";
+import { CameraControls, Grid, Line, RoundedBox } from "@react-three/drei";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import clsx from "clsx";
-import { ChevronLeft, ChevronRight, Minus, Plus, Scan, SquarePlus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Minus, Move, Plus, RotateCw, Scan, SquarePlus, X } from "lucide-react";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
 import { useDrag, type DropTarget } from "../lib/drag";
-import type { PlacedStation, RiskLevel, StationKind } from "../engine/types";
+import type { RiskLevel, StationKind } from "../engine/types";
 import { uid } from "../live/backend";
 import { haptic } from "../lib/haptics";
 import { useCan } from "../store";
@@ -256,16 +256,16 @@ function markerMetric(a: Area): string {
   return `${a.orders.length} ready`;
 }
 
-function AreaNode({ a, selected, culprit, onSelect }: { a: Area; selected: boolean; culprit: boolean; onSelect: () => void }) {
-  const [x, z] = POS[a.id];
+function AreaNode({ a, node, selected, culprit, onSelect }: { a: Area; node: Node3D; selected: boolean; culprit: boolean; onSelect: () => void }) {
   const Model = MODEL[a.id];
   const click = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     onSelect();
   };
   return (
-    <group position={[x, 0, z]}>
+    <group position={[node.x, 0, node.z]}>
       <group
+        rotation-y={node.rot}
         onClick={click}
         onPointerOver={(e) => {
           e.stopPropagation();
@@ -280,18 +280,48 @@ function AreaNode({ a, selected, culprit, onSelect }: { a: Area; selected: boole
   );
 }
 
-function lane(a: AreaId, b: AreaId) {
-  const [ax, az] = POS[a];
-  const [bx, bz] = POS[b];
-  const start = new THREE.Vector3(ax + (bx > ax ? 1.4 : bx < ax ? -1.4 : 0), 0.03, az + (bz > az ? 1.2 : bz < az ? -1.2 : 0));
-  const end = new THREE.Vector3(bx - (bx > ax ? 1.4 : bx < ax ? -1.4 : 0), 0.03, bz - (bz > az ? 1.2 : bz < az ? -1.2 : 0));
+type XZ = [number, number];
+
+/** Every station in the room: the six built-in ones (possibly moved) plus extras a manager placed. */
+interface Node3D {
+  id: string;
+  kind: StationKind;
+  x: number;
+  z: number;
+  rot: number;
+  placed: boolean;
+  n: number;
+}
+
+function useNodes(): Node3D[] {
+  const layout = useTwin((s) => s.state.layout);
+  const poses = useTwin((s) => s.state.basePoses);
+  return useMemo(
+    () => [
+      ...AREA_ORDER.map((id) => ({ id, kind: id, x: poses[id]?.x ?? POS[id][0], z: poses[id]?.z ?? POS[id][1], rot: poses[id]?.rot ?? 0, placed: false, n: 1 })),
+      ...layout.map((p) => ({ id: p.id, kind: p.kind, x: p.x, z: p.z, rot: p.rot ?? 0, placed: true, n: layout.filter((x) => x.kind === p.kind).indexOf(p) + 2 })),
+    ],
+    [layout, poses],
+  );
+}
+
+function lane([ax, az]: XZ, [bx, bz]: XZ) {
+  const a = new THREE.Vector3(ax, 0.03, az);
+  const b = new THREE.Vector3(bx, 0.03, bz);
+  const dir = b.clone().sub(a);
+  const len = dir.length();
+  dir.normalize();
+  const start = a.clone().addScaledVector(dir, Math.min(1.9, len * 0.3));
+  const end = b.clone().addScaledVector(dir, -Math.min(1.9, len * 0.3));
   const mid = start.clone().lerp(end, 0.5);
-  mid.z += 0.8;
+  mid.add(new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(Math.min(0.8, len * 0.1)));
   return new THREE.QuadraticBezierCurve3(start, mid, end);
 }
 
-function Lane({ from, to, color, width, flowing, speed, offset }: { offset: number; from: AreaId; to: AreaId; color: string; width: number; flowing: boolean; speed: number }) {
-  const curve = useMemo(() => lane(from, to), [from, to]);
+function Lane({ from, to, color, width, flowing, speed, offset }: { offset: number; from: XZ; to: XZ; color: string; width: number; flowing: boolean; speed: number }) {
+  const [fx, fz] = from;
+  const [tx, tz] = to;
+  const curve = useMemo(() => lane([fx, fz], [tx, tz]), [fx, fz, tx, tz]);
   const points = useMemo(() => curve.getPoints(40), [curve]);
   const pucks = useRef<THREE.Group>(null);
   const t = useRef(offset);
@@ -335,43 +365,32 @@ const KIND_LABEL: Record<StationKind, string> = { orders: "Orders in", pantry: "
 const FLOOR = { x: [-10.2, 10.2], z: [-5.6, 5.6] } as const;
 const snap = (v: number, [lo, hi]: readonly [number, number]) => Math.min(hi, Math.max(lo, Math.round(v * 2) / 2));
 
-function PlacedNode({ p, n, canEdit }: { p: PlacedStation; n: number; canEdit: boolean }) {
-  const act = useTwin((s) => s.act);
-  const Model = MODEL[p.kind];
+function PlacedNode({ node }: { node: Node3D }) {
+  const Model = MODEL[node.kind];
   return (
-    <group position={[p.x, 0, p.z]}>
-      <Model busy={false} />
+    <group position={[node.x, 0, node.z]}>
+      <group rotation-y={node.rot}>
+        <Model busy={false} />
+      </group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
         <ringGeometry args={[1.75, 1.82, 64]} />
         <meshBasicMaterial color={C.wall} transparent opacity={0.7} depthWrite={false} />
       </mesh>
-      <Html position={[0, 2.2, 0]} center zIndexRange={[20, 0]}>
-        <div className="flex items-center gap-1 rounded-full border border-navy/10 bg-white/90 py-0.5 pr-1 pl-2.5 text-[12px] font-bold whitespace-nowrap shadow-[0_4px_14px_-6px_rgba(0,0,0,0.25)] select-none">
-          <span className="size-2 rounded-full" style={{ background: C.wall }} />
-          {KIND_LABEL[p.kind]} {n}
-          {canEdit && (
-            <button
-              title="Remove station"
-              className="ml-0.5 flex size-5 items-center justify-center rounded-full text-mute hover:bg-navy/10 hover:text-ink"
-              onClick={() => {
-                haptic("tick");
-                void act({ type: "station_removed", id: p.id });
-              }}
-            >
-              <X className="size-3" />
-            </button>
-          )}
-        </div>
-      </Html>
     </group>
   );
 }
 
-function Ghost({ at }: { at: { x: number; z: number; ok: boolean } | null }) {
+type GhostAt = { x: number; z: number; ok: boolean; kind: StationKind; rot: number };
+
+function Ghost({ at }: { at: GhostAt | null }) {
   if (!at) return null;
   const c = at.ok ? C.wall : RISK_HEX.critical;
+  const Model = MODEL[at.kind];
   return (
     <group position={[at.x, 0, at.z]}>
+      <group rotation-y={at.rot} scale={0.98}>
+        <Model busy={false} />
+      </group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]}>
         <circleGeometry args={[1.8, 48]} />
         <meshBasicMaterial color={c} transparent opacity={0.18} depthWrite={false} />
@@ -412,9 +431,7 @@ function homeView(width: number, height: number, insets: Insets) {
   return [t[0] + dir.x, t[1] + dir.y, t[2] + dir.z, ...t] as const;
 }
 
-function Scene({ controls, insets, ghost }: { controls: React.RefObject<CameraControls | null>; insets: Insets; ghost: { x: number; z: number; ok: boolean } | null }) {
-  const layout = useTwin((s) => s.state.layout);
-  const canEdit = useCan("manage_layout");
+function Scene({ controls, insets, ghost, nodes, hidden }: { controls: React.RefObject<CameraControls | null>; insets: Insets; ghost: GhostAt | null; nodes: Node3D[]; hidden: string | null }) {
   const size = useThree((s) => s.size);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const { areas } = useAreas();
@@ -426,16 +443,23 @@ function Scene({ controls, insets, ghost }: { controls: React.RefObject<CameraCo
   const culprit = traced ? culpritArea(traced) : null;
   const byId = Object.fromEntries(areas.map((a) => [a.id, a])) as Record<AreaId, Area>;
   const traceEnd = traced ? AREA_ORDER.indexOf(culprit ?? "pickup") : -1;
+  const at = (id: AreaId): XZ => {
+    const n = nodes.find((x) => x.id === id)!;
+    return [n.x, n.z];
+  };
 
   useEffect(() => {
     const c = controls.current;
     if (!c) return;
     if (area) {
-      const [x, z] = POS[area];
+      const n = nodes.find((x) => x.id === area);
+      const [x, z] = n ? [n.x, n.z] : POS[area];
       void c.setLookAt(x + 4.2, 8, z + 10, x, 0.8, z, true);
     } else {
       void c.setLookAt(...homeView(size.width, size.height, insets), true);
     }
+    // Only fly when the selection or viewport changes, not when a station is nudged.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [area, controls, size.width, size.height, insets]);
 
   useEffect(() => {
@@ -456,20 +480,30 @@ function Scene({ controls, insets, ghost }: { controls: React.RefObject<CameraCo
         const inTrace = traced && i <= traceEnd;
         const r = RANK[byId[a].risk] <= RANK[byId[b].risk] ? byId[a].risk : byId[b].risk;
         const color = inTrace ? C.accent : r === "normal" ? C.muted : RISK_HEX[r];
-        return <Lane key={`${a}-${b}`} offset={i * 0.37} from={a} to={b} color={traced && !inTrace ? "#dce1ea" : color} width={inTrace || r !== "normal" ? 4 : 2.5} flowing={!paused} speed={speed} />;
+        return <Lane key={`${a}-${b}`} offset={i * 0.37} from={at(a)} to={at(b)} color={traced && !inTrace ? "#dce1ea" : color} width={inTrace || r !== "normal" ? 4 : 2.5} flowing={!paused} speed={speed} />;
       })}
-      {areas.map((a) => (
-        <AreaNode
-          key={a.id}
-          a={a}
-          selected={area === a.id}
-          culprit={culprit === a.id}
-          onSelect={() => selectArea(area === a.id ? null : a.id)}
-        />
-      ))}
-      {layout.map((p) => (
-        <PlacedNode key={p.id} p={p} n={layout.filter((x) => x.kind === p.kind).indexOf(p) + 2} canEdit={canEdit} />
-      ))}
+      {nodes
+        .filter((p) => p.placed)
+        .flatMap((p) => {
+          const i = AREA_ORDER.indexOf(p.kind);
+          const r = byId[p.kind].risk;
+          const color = r === "normal" ? "#ee8a5a" : RISK_HEX[r];
+          const me: XZ = [p.x, p.z];
+          return [
+            i > 0 && <Lane key={`${p.id}-in`} offset={0.2} from={at(AREA_ORDER[i - 1])} to={me} color={color} width={2.5} flowing={!paused} speed={speed} />,
+            i < AREA_ORDER.length - 1 && <Lane key={`${p.id}-out`} offset={0.6} from={me} to={at(AREA_ORDER[i + 1])} color={color} width={2.5} flowing={!paused} speed={speed} />,
+          ];
+        })}
+      {areas.map((a) => {
+        const node = nodes.find((n) => n.id === a.id)!;
+        if (hidden === a.id) return null;
+        return <AreaNode key={a.id} a={a} node={node} selected={area === a.id} culprit={culprit === a.id} onSelect={() => selectArea(area === a.id ? null : a.id)} />;
+      })}
+      {nodes
+        .filter((p) => p.placed && p.id !== hidden)
+        .map((p) => (
+          <PlacedNode key={p.id} node={p} />
+        ))}
       <Ghost at={ghost} />
     </>
   );
@@ -491,23 +525,28 @@ class GLBoundary extends Component<{ children: ReactNode }, { failed: boolean }>
   }
 }
 
-type MarkerEls = Partial<Record<AreaId, HTMLElement | null>>;
+type MarkerEls = Record<string, HTMLElement | null>;
 
 const DROP_OF: Partial<Record<AreaId, DropTarget>> = { prep: "prep", cook: "cook", pack: "pack", pickup: "ready" };
 
-function MarkerTracker({ place }: { place: (id: AreaId, x: number, y: number, visible: boolean) => void }) {
+function MarkerTracker({ nodes, place }: { nodes: React.RefObject<Node3D[]>; place: (id: string, x: number, y: number, visible: boolean) => void }) {
   const v = useRef(new THREE.Vector3());
   useFrame(({ camera, size }) => {
-    for (const id of AREA_ORDER) {
-      const [x, z] = POS[id];
-      v.current.set(x, MARKER_Y[id], z).project(camera);
-      place(id, ((v.current.x + 1) / 2) * size.width, ((1 - v.current.y) / 2) * size.height, v.current.z <= 1);
+    for (const n of nodes.current) {
+      v.current.set(n.x, MARKER_Y[n.kind], n.z).project(camera);
+      place(n.id, ((v.current.x + 1) / 2) * size.width, ((1 - v.current.y) / 2) * size.height, v.current.z <= 1);
     }
   });
   return null;
 }
 
-function Markers({ register }: { register: (id: AreaId, el: HTMLElement | null) => void }) {
+interface EditTools {
+  move: (n: Node3D) => (e: React.PointerEvent) => void;
+  rotate: (n: Node3D) => void;
+  remove: (n: Node3D) => void;
+}
+
+function Markers({ nodes, register, edit }: { nodes: Node3D[]; register: (id: string, el: HTMLElement | null) => void; edit: EditTools | null }) {
   const { areas } = useAreas();
   const area = useTwin((s) => s.area);
   const selectArea = useTwin((s) => s.selectArea);
@@ -515,30 +554,48 @@ function Markers({ register }: { register: (id: AreaId, el: HTMLElement | null) 
   const traceEnd = traced ? AREA_ORDER.indexOf(culpritArea(traced) ?? "pickup") : -1;
   const dragOver = useDrag((s) => s.over);
   const dragging = useDrag((s) => !!s.order);
+  const byId = Object.fromEntries(areas.map((a) => [a.id, a])) as Record<AreaId, Area>;
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {areas.map((a) => {
-        const selected = area === a.id;
+      {nodes.map((n) => {
+        const a = byId[n.kind];
+        const selected = area === a.id && !n.placed;
         const dim = !!traced && AREA_ORDER.indexOf(a.id) > traceEnd;
-        const onSelect = () => selectArea(selected ? null : a.id);
+        const onSelect = () => selectArea(area === a.id ? null : a.id);
+        const drop = DROP_OF[a.id];
         return (
-          <div key={a.id} ref={(el) => register(a.id, el)} className="pointer-events-auto absolute top-0 left-0 will-change-transform" style={{ visibility: "hidden" }}>
-        <button
-          onClick={onSelect}
-          data-drop={DROP_OF[a.id]}
-          className={clsx(
-            "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-bold whitespace-nowrap shadow-[0_4px_14px_-6px_rgba(0,0,0,0.25)] backdrop-blur-md transition-all select-none",
-            selected ? "border-transparent bg-navy text-white" : "border-navy/10 bg-white/90 text-ink hover:bg-white",
-            dim && "opacity-40",
-            dragging && DROP_OF[a.id] && "scale-110 border-dashed border-accent/60",
-            dragging && DROP_OF[a.id] && dragOver === DROP_OF[a.id] && "scale-125 border-solid border-accent bg-accent! text-white",
-          )}
-        >
-          <span className={clsx("size-2 rounded-full", a.risk === "critical" && !selected && "pulse-dot")} style={{ background: selected ? "#fff" : RISK_HEX[a.risk] }} />
-          {a.name}
-          <span className={clsx("font-semibold tabular-nums", selected ? "text-white/80" : "text-mute")}>{markerMetric(a)}</span>
-          {a.changed && !selected && <span className="rounded-full bg-ai/12 px-1.5 text-[10px] font-extrabold text-ai">plan</span>}
-        </button>
+          <div key={n.id} ref={(el) => register(n.id, el)} className="pointer-events-auto absolute top-0 left-0 flex items-center gap-1 will-change-transform" style={{ visibility: "hidden" }}>
+            <button
+              onClick={onSelect}
+              data-drop={drop}
+              className={clsx(
+                "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold whitespace-nowrap shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_14px_-6px_rgba(16,24,40,0.3)] backdrop-blur-md transition-all select-none",
+                selected ? "bg-navy text-white" : "bg-white/95 text-ink hover:bg-white",
+                dim && "opacity-40",
+                dragging && drop && "scale-110 ring-2 ring-accent/50 ring-dashed",
+                dragging && drop && dragOver === drop && "scale-125 bg-accent! text-white",
+              )}
+            >
+              <span className={clsx("size-2 rounded-full", a.risk === "critical" && !selected && "pulse-dot")} style={{ background: selected ? "#fff" : n.placed ? C.wall : RISK_HEX[a.risk] }} />
+              {n.placed ? `${KIND_LABEL[n.kind]} ${n.n}` : a.name}
+              <span className={clsx("font-semibold tabular-nums", selected ? "text-white/80" : "text-mute")}>{markerMetric(a)}</span>
+              {a.changed && !selected && !n.placed && <span className="rounded-full bg-ai/12 px-1.5 text-[10px] font-extrabold text-ai">plan</span>}
+            </button>
+            {edit && (
+              <span className="flex items-center gap-0.5 rounded-full bg-white/95 p-0.5 shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_14px_-6px_rgba(16,24,40,0.3)]">
+                <button onPointerDown={edit.move(n)} className="flex size-6 touch-none items-center justify-center rounded-full text-mute hover:bg-navy/8 hover:text-ink" style={{ cursor: "grab" }} title="Drag to move" aria-label={`Move ${a.name}`}>
+                  <Move className="size-3.5" />
+                </button>
+                <button onClick={() => edit.rotate(n)} className="flex size-6 items-center justify-center rounded-full text-mute hover:bg-navy/8 hover:text-ink" title="Rotate 45°" aria-label={`Rotate ${a.name}`}>
+                  <RotateCw className="size-3.5" />
+                </button>
+                {n.placed && (
+                  <button onClick={() => edit.remove(n)} className="flex size-6 items-center justify-center rounded-full text-mute hover:bg-crit/10 hover:text-crit" title="Remove station" aria-label="Remove station">
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </span>
+            )}
           </div>
         );
       })}
@@ -551,10 +608,10 @@ const NO_INSETS: Insets = { left: 0, right: 0 };
 export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
   const controls = useRef<CameraControls | null>(null);
   const markers = useRef<MarkerEls>({});
-  const register = useCallback((id: AreaId, el: HTMLElement | null) => {
+  const register = useCallback((id: string, el: HTMLElement | null) => {
     markers.current[id] = el;
   }, []);
-  const place = useCallback((id: AreaId, x: number, y: number, visible: boolean) => {
+  const place = useCallback((id: string, x: number, y: number, visible: boolean) => {
     const el = markers.current[id];
     if (!el) return;
     el.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
@@ -565,12 +622,17 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
   const act = useTwin((s) => s.act);
   const canEdit = useCan("manage_layout");
   const [palette, setPalette] = useState(false);
-  const [carry, setCarry] = useState<{ kind: StationKind; x: number; y: number } | null>(null);
-  const [ghost, setGhost] = useState<{ x: number; z: number; ok: boolean } | null>(null);
-  const layout = useTwin((s) => s.state.layout);
-  const taken = [...Object.values(POS), ...layout.map((p) => [p.x, p.z] as [number, number])];
-  const free = (x: number, z: number) => taken.every(([tx, tz]) => Math.abs(tx - x) > 2.6 || Math.abs(tz - z) > 1.9);
+  const [carry, setCarry] = useState<{ kind: StationKind; x: number; y: number; moving: boolean } | null>(null);
+  const [ghost, setGhost] = useState<GhostAt | null>(null);
+  const [hidden, setHidden] = useState<string | null>(null);
+  const nodes = useNodes();
+  const nodesRef = useRef(nodes);
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+  const free = (x: number, z: number, except?: string) => nodes.every((n) => n.id === except || Math.hypot(n.x - x, n.z - z) > 2.9);
   const wrap = useRef<HTMLDivElement>(null);
+  const paletteRef = useRef<HTMLDivElement>(null);
   const cam = useRef<THREE.Camera | null>(null);
   const grabCamera = useCallback((c: THREE.Camera) => {
     cam.current = c;
@@ -580,42 +642,66 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
     if (!el || !cam.current) return null;
     const r = el.getBoundingClientRect();
     if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) return null;
+    const pr = paletteRef.current?.getBoundingClientRect();
+    if (pr && cx >= pr.left && cx <= pr.right && cy >= pr.top && cy <= pr.bottom) return null;
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), cam.current);
     const hit = new THREE.Vector3();
     if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit)) return null;
-    const x = snap(hit.x, FLOOR.x);
-    const z = snap(hit.z, FLOOR.z);
-    return { x, z, ok: free(x, z) };
+    return { x: snap(hit.x, FLOOR.x), z: snap(hit.z, FLOOR.z) };
   };
-  const pick = (kind: StationKind) => (e: React.PointerEvent) => {
+  /** Shared drag loop for new stations from the palette and for moving existing ones. */
+  const carryStation = (e: React.PointerEvent, kind: StationKind, rot: number, moving: Node3D | null, done: (x: number, z: number) => void) => {
     e.preventDefault();
+    e.stopPropagation();
+    (e.target as Element).releasePointerCapture?.(e.pointerId);
     haptic("pick");
-    setCarry({ kind, x: e.clientX, y: e.clientY });
-    let last: { x: number; z: number; ok: boolean } | null = null;
+    if (controls.current) controls.current.enabled = false;
+    setCarry({ kind, x: e.clientX, y: e.clientY, moving: !!moving });
+    if (moving) setHidden(moving.id);
+    let last: GhostAt | null = null;
     const move = (ev: PointerEvent) => {
-      setCarry({ kind, x: ev.clientX, y: ev.clientY });
-      const at = (ev.target as HTMLElement | null)?.closest?.("[data-palette]") ? null : floorAt(ev.clientX, ev.clientY);
-      if (at && (at.x !== last?.x || at.z !== last?.z)) haptic("tick");
-      last = at;
-      setGhost(at);
+      setCarry({ kind, x: ev.clientX, y: ev.clientY, moving: !!moving });
+      const p = floorAt(ev.clientX, ev.clientY);
+      const next = p && { ...p, ok: free(p.x, p.z, moving?.id), kind, rot };
+      if (next && (next.x !== last?.x || next.z !== last?.z)) haptic("tick");
+      last = next;
+      setGhost(next);
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
+      if (controls.current) controls.current.enabled = true;
       setCarry(null);
       setGhost(null);
+      setHidden(null);
       if (last && !last.ok) haptic("error");
       if (last?.ok) {
         haptic("drop");
-        void act({ type: "station_added", station: { id: uid(10), kind, x: last.x, z: last.z } });
+        done(last.x, last.z);
       }
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
   };
+  const pick = (kind: StationKind) => (e: React.PointerEvent) =>
+    carryStation(e, kind, 0, null, (x, z) => void act({ type: "station_added", station: { id: uid(10), kind, x, z, rot: 0 } }));
+  const edit: EditTools | null =
+    canEdit && palette
+      ? {
+          move: (n) => (e) => carryStation(e, n.kind, n.rot, n, (x, z) => void act({ type: "station_moved", id: n.id, x, z, rot: n.rot })),
+          rotate: (n) => {
+            haptic("tick");
+            void act({ type: "station_moved", id: n.id, x: n.x, z: n.z, rot: (n.rot + Math.PI / 4) % (Math.PI * 2) });
+          },
+          remove: (n) => {
+            haptic("tick");
+            void act({ type: "station_removed", id: n.id });
+          },
+        }
+      : null;
   const name = useAreas().areas.find((a) => a.id === area)?.name ?? "Whole kitchen";
   const step = (d: number) => {
     const i = area ? AREA_ORDER.indexOf(area) : d > 0 ? -1 : AREA_ORDER.length;
@@ -640,24 +726,26 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
             truckSpeed={2.6}
             dollyToCursor
           />
-          <Scene controls={controls} insets={insets} ghost={ghost} />
+          <Scene controls={controls} insets={insets} ghost={ghost} nodes={nodes} hidden={hidden} />
           <CameraGrab onCamera={grabCamera} />
-          <MarkerTracker place={place} />
+          <MarkerTracker nodes={nodesRef} place={place} />
         </Canvas>
-        <Markers register={register} />
+        <Markers nodes={nodes} register={register} edit={edit} />
       </GLBoundary>
       {canEdit && palette && (
-        <div data-palette className="sidebar absolute bottom-20 left-1/2 w-[min(92%,560px)] -translate-x-1/2 rounded-[14px]! p-3 lg:bottom-[74px]">
-          <div className="mb-2 flex items-center gap-2 text-[12.5px] font-extrabold">
-            Add a station
-            <span className="font-semibold text-faint">drag onto the floor · each one adds a person to that station</span>
+        <div ref={paletteRef} data-palette className="sidebar absolute bottom-20 left-1/2 w-[min(92%,560px)] -translate-x-1/2 rounded-[14px]! p-3 lg:bottom-[74px]">
+          <div className="mb-2 flex items-start gap-2 text-[12.5px] font-extrabold">
+            <div className="min-w-0">
+              Edit layout
+              <div className="text-[11.5px] font-semibold text-mute">Drag a new station onto the floor. Use the handles on any station to move or rotate it.</div>
+            </div>
             <button className="tbtn ml-auto size-6!" onClick={() => setPalette(false)} aria-label="Close">
               <X className="size-3.5" />
             </button>
           </div>
           <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
             {(Object.keys(KIND_LABEL) as StationKind[]).map((k) => (
-              <button key={k} onPointerDown={pick(k)} className="flex h-11 touch-none items-center justify-center gap-1.5 rounded-[10px] border border-navy/12 bg-white text-[12.5px] font-bold hover:border-[#ff5f1f]/60 active:cursor-grabbing" style={{ cursor: "grab" }}>
+              <button key={k} onPointerDown={pick(k)} className="flex h-11 touch-none items-center justify-center gap-1.5 rounded-[10px] bg-white text-[12.5px] font-bold shadow-[var(--shadow-btn)] transition-shadow hover:shadow-[var(--shadow-btn-hover)] active:cursor-grabbing" style={{ cursor: "grab" }}>
                 <span className="size-2 rounded-full" style={{ background: C.wall }} />
                 {KIND_LABEL[k]}
               </button>
@@ -667,7 +755,7 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
       )}
       {carry && (
         <div className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ff5f1f] px-3 py-1.5 text-[12.5px] font-extrabold text-white shadow-lg" style={{ left: carry.x, top: carry.y - 28 }}>
-          {KIND_LABEL[carry.kind]} {ghost ? (ghost.ok ? "· release to place" : "· too close to another station") : ""}
+          {KIND_LABEL[carry.kind]} {ghost ? (ghost.ok ? "· release to place" : "· too close to another station") : carry.moving ? "· drag onto the floor" : ""}
         </div>
       )}
       <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-4 lg:bottom-5">
@@ -693,7 +781,7 @@ export default function Kitchen3D({ insets = NO_INSETS }: { insets?: Insets }) {
           {canEdit && (
             <>
               <span className="mx-1 h-4 w-px bg-navy/10" />
-              <button className={clsx("tbtn rounded-full!", palette && "bg-navy! text-white!")} onClick={() => setPalette(!palette)} title="Add stations (manager)">
+              <button className={clsx("tbtn rounded-full!", palette && "bg-navy! text-white!")} onClick={() => setPalette(!palette)} title="Edit layout (manager)">
                 <SquarePlus className="size-4" />
               </button>
             </>

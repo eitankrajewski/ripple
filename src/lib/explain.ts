@@ -68,25 +68,35 @@ export function fallbackExplanation(p: ExplainPayload): Explanation {
   };
 }
 
-export async function requestExplanation(p: ExplainPayload, signal?: AbortSignal): Promise<Explanation> {
-  return requestWording(p, fallbackExplanation(p), signal);
+export async function requestExplanation(p: ExplainPayload, signal?: AbortSignal, previous?: Explanation | null): Promise<Explanation> {
+  return requestWording(p, fallbackExplanation(p), signal, previous);
 }
 
 /** Asks the server to reword deterministic facts. Any failure returns the deterministic text. */
-export async function requestWording(payload: unknown, fallback: Explanation, signal?: AbortSignal): Promise<Explanation> {
+const AI_NOTES: Record<string, string> = {
+  not_configured: "AI wording isn't set up on this server yet (GEMINI_API_KEY is missing), so this is the engine's own wording.",
+  upstream: "Gemini didn't answer just now. Showing the engine's wording; try again in a moment.",
+  offline: "Couldn't reach the AI service. Showing the engine's wording.",
+};
+
+export async function requestWording(payload: unknown, fallback: Explanation, signal?: AbortSignal, previous?: Explanation | null): Promise<Explanation> {
   try {
+    const body = previous?.source === "gemini" ? { ...(payload as object), previousWording: { headline: previous.headline, causeChain: previous.causeChain } } : payload;
     const res = await fetch("/api/explain", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
       signal,
     });
-    if (!res.ok) throw new Error(String(res.status));
+    if (!res.ok) {
+      const err = ((await res.json().catch(() => ({}))) as { error?: string }).error;
+      return { ...fallback, aiNote: AI_NOTES[err ?? ""] ?? AI_NOTES.offline };
+    }
     const data = (await res.json()) as Partial<Explanation>;
     if (!data.headline || !data.causeChain || !data.recommendationReason || !data.tradeoff) throw new Error("bad shape");
     return { headline: data.headline, causeChain: data.causeChain, recommendationReason: data.recommendationReason, tradeoff: data.tradeoff, source: "gemini" };
   } catch {
-    return fallback;
+    return { ...fallback, aiNote: AI_NOTES.offline };
   }
 }
 

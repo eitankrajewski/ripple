@@ -32,7 +32,7 @@ function AddIngredient({ onDone }: { onDone: () => void }) {
         e.preventDefault();
         save();
       }}
-      className="mb-2 space-y-2 rounded-[10px] border border-navy/12 bg-white p-2.5"
+      className="mb-2 space-y-2 rounded-[12px] bg-white p-3 shadow-[var(--shadow-card)]"
     >
       <div className="text-[12px] font-extrabold text-mute">New ingredient</div>
       <input autoFocus className="field w-full font-bold" placeholder="e.g. Avocado" value={name} onChange={(e) => setName(e.target.value)} aria-label="Ingredient name" />

@@ -252,7 +252,7 @@ export const useTwin = create<Store>((set, get) => {
     explainWithAI: async () => {
       const { state, previewStrategyId } = get();
       set({ explaining: true });
-      const explanation = await requestExplanation(buildPayload(state, previewStrategyId ?? undefined));
+      const explanation = await requestExplanation(buildPayload(state, previewStrategyId ?? undefined), undefined, get().explanation);
       set({ explanation, explaining: false });
     },
     reset: () => {
@@ -276,7 +276,7 @@ export const useTwin = create<Store>((set, get) => {
       const sc = get().scenario;
       if (!sc.result || !sc.wording) return;
       set({ scenario: { ...sc, wordingLoading: true } });
-      const wording = await requestWording(scenarioPayload(sc.query, sc.result), scenarioExplanation(sc.result));
+      const wording = await requestWording(scenarioPayload(sc.query, sc.result), scenarioExplanation(sc.result), undefined, sc.wording);
       set({ scenario: { ...get().scenario, wording, wordingLoading: false } });
     },
     applyWhatIf: () => {

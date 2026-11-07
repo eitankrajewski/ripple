@@ -17,7 +17,8 @@ The slides list five pain points: **#01** order management and prep timing, **#0
 | **Component check-offs** (tick finished items on a ticket, *Send 1 to Cook*) | #01, #02 | A finished part of an order moves ahead on its own instead of waiting for the slowest item. Pack shows which parts are still upstream and can't finish the order until every part has arrived and been bagged. |
 | **Do together batches** (same component across orders, *All 3 done → Cook*) | #01, #03 | When several tickets at a station share a component (for example chicken), they're grouped into one batch you finish with one tap, so the line preps it once instead of order by order. |
 | **Manager Board** (drag any ticket to any station; drag from the list onto a 3D station; ··· "Move to" on touch) | #01, #02 | Managers fix problems directly, for example sending an order back to Cook for a re-make or skipping a step. Android phones vibrate on pick-up and drop. |
-| **Expanding alert bar** ("what changed", "where the kitchen stands", "Do this now" buttons) | #01 | During a rush, the next action is one click away: compare plans, recount stock, open the overloaded station, or trace a late order. |
+| **Status bar** (one line, click for a short issue list) | #01 | Each problem is one row with a plain button: compare plans, recount stock, open a station, or trace a late order. |
+| **Over-capacity options** (station above 100%) | #01, #05 | Shown in the status list and the station inspector: move one person from the least busy station, hold the queued order with the latest pickup, or cancel it with a ready-to-send customer message (and a reminder to cancel on the DoorDash tablet). Each is a `staff_moved`, `hold_order` or `cancel_order` event. |
 
 ## Back of house
 
@@ -37,7 +38,7 @@ The slides list five pain points: **#01** order management and prep timing, **#0
 | Feature | Problem | How it addresses it |
 | --- | --- | --- |
 | **3D kitchen digital twin** (click a station to see its status) | #01, #03, #05 | One visual of where every order is and which station or ingredient is the bottleneck. |
-| **Station layout editor** (manager drags preset stations onto the 3D floor) | #05 | Bigger or differently shaped kitchens can be modeled: every extra Prep, Cook or Pack station adds one to that station's capacity, and the layout syncs to every device. |
+| **Station layout editor** (manager drags preset stations onto the 3D floor, then moves or rotates any station) | #05 | Bigger or differently shaped kitchens can be modeled: every extra Prep, Cook or Pack station adds one to that station's capacity and is drawn into the workflow (lanes from the station before it and to the station after it). Move and rotate are `station_moved` events, so the layout syncs to every device. |
 | **Live vs. Simulation modes** | All | Live runs the real kitchen. Simulation is a seeded practice kitchen for training and demos, and it reproduces the same way every time. |
 | **Roles and join codes** (Manager, Prep, Line cook, Expo, Host; Supabase with row-level security) | #02, #05 | Every device does only its own job, so mistakes like a cook checking off prep are rejected by the server. Staff join with a code and need no account. |
 | **Event log + activity feed** | #02, #04 | Every check-off, move, handoff and plan approval is recorded with who did it and when. This is the base for performance tracking and for finding where mistakes happen. |

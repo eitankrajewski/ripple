@@ -1,11 +1,12 @@
 import clsx from "clsx";
 import { ChevronLeft, ChevronRight, GitCompareArrows, Info, Sparkles, X, Zap } from "lucide-react";
-import type { OrderView } from "../engine/types";
+import type { OrderView, StationId } from "../engine/types";
 import { AREA_ORDER, culpritArea, useAreas, type Area } from "../lib/areas";
 import { minutes, pct, SOURCE, statusLabel } from "../lib/ui";
 import { useTwin, type Tab } from "../store";
 import { AskTab } from "./AskTab";
 import { PantryAdd } from "./PantryAdd";
+import { StationFix } from "./StationFix";
 import { Dot, IconTabs, LoadBar, OrderRow, PantryRow, RiskChip, Section, SimBadge } from "./kit";
 import { PlanTab } from "./PlanTab";
 
@@ -65,6 +66,7 @@ function AreaInspector({ a }: { a: Area }) {
               <Row k="Orders here now" v={a.orders.length} />
             </div>
           </div>
+          {a.load > 1 && <StationFix station={a.id as StationId} />}
         </Section>
       )}
 

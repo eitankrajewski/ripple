@@ -19,7 +19,7 @@ function SpecEditor({ spec }: { spec: ScenarioSpec }) {
       <select
         value={spec.kind}
         onChange={(e) => edit({ ...spec, kind: e.target.value as ScenarioSpec["kind"], station: spec.station ?? "cook", ingredientId: spec.ingredientId ?? "chicken" })}
-        className="h-6 rounded-[6px] border border-line bg-white px-1 font-bold text-ink outline-none"
+        className="h-7 rounded-[7px] bg-white px-1.5 font-bold text-ink shadow-[var(--shadow-btn)] outline-none"
       >
         {SCENARIO_KINDS.map((k) => (
           <option key={k.kind} value={k.kind}>
@@ -27,7 +27,7 @@ function SpecEditor({ spec }: { spec: ScenarioSpec }) {
           </option>
         ))}
       </select>
-      <span className="flex h-6 items-center rounded-[6px] border border-line bg-white">
+      <span className="flex h-7 items-center rounded-[7px] bg-white shadow-[var(--shadow-btn)]">
         <button className="px-1.5" onClick={() => edit({ ...spec, count: Math.max(min, spec.count - (spec.count > 10 ? 5 : 1)) })} aria-label="Less">
           <Minus className="size-3" />
         </button>
@@ -137,14 +137,13 @@ export function AskTab() {
     ask(t);
   };
   return (
-    <div className="space-y-3">
-      <p className="text-mute">Ask a what-if. The twin plays it out on a copy of the kitchen right now; the real kitchen doesn’t change.</p>
+    <div className="space-y-3.5">
       <form
         onSubmit={(e) => {
           e.preventDefault();
           submit(q);
         }}
-        className="flex items-end gap-1.5 rounded-[10px] border border-line bg-white p-1.5 pl-2.5 focus-within:border-accent"
+        className="flex items-end gap-2 rounded-[14px] bg-white p-2 pl-3 shadow-[var(--shadow-card)] ring-accent/40 focus-within:ring-2"
       >
         <textarea
           value={q}
@@ -155,18 +154,18 @@ export function AskTab() {
               submit(q);
             }
           }}
-          rows={2}
+          rows={3}
           placeholder="What should we do if 20 customers suddenly walk in?"
-          className="min-h-[40px] flex-1 resize-none bg-transparent py-1 font-semibold outline-none placeholder:text-faint"
+          className="min-h-[68px] flex-1 resize-none bg-transparent py-1 text-[15px] leading-snug font-semibold outline-none placeholder:text-faint"
         />
-        <button type="submit" disabled={!q.trim()} className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent text-white disabled:opacity-35" aria-label="Ask">
+        <button type="submit" disabled={!q.trim()} className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-[0_2px_6px_-1px_rgba(47,111,237,0.5)] disabled:opacity-35 disabled:shadow-none" aria-label="Ask">
           <ArrowUp className="size-4" strokeWidth={2.75} />
         </button>
       </form>
       {!sc.result && (
         <div className="flex flex-wrap gap-1.5">
           {EXAMPLES.map((e) => (
-            <button key={e} onClick={() => submit(e)} className="rounded-full border border-line bg-white px-2.5 py-1 text-[12px] font-semibold hover:border-black/20">
+            <button key={e} onClick={() => submit(e)} className="rounded-full bg-white px-3 py-1.5 text-[12.5px] font-semibold shadow-[var(--shadow-btn)] transition-shadow hover:shadow-[var(--shadow-btn-hover)]">
               {e}
             </button>
           ))}

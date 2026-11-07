@@ -17,6 +17,9 @@
 }
 
 :root {
+  --shadow-btn: 0 0 0 0.5px rgba(22, 36, 71, 0.1), 0 1px 2px rgba(16, 24, 40, 0.08), 0 2px 6px -2px rgba(16, 24, 40, 0.1);
+  --shadow-btn-hover: 0 0 0 0.5px rgba(22, 36, 71, 0.12), 0 2px 4px rgba(16, 24, 40, 0.08), 0 6px 14px -6px rgba(16, 24, 40, 0.18);
+  --shadow-card: 0 0 0 0.5px rgba(22, 36, 71, 0.07), 0 1px 3px rgba(16, 24, 40, 0.06), 0 6px 18px -10px rgba(16, 24, 40, 0.16);
   color-scheme: light;
   background: #eef1f7;
   color: var(--color-ink);
@@ -81,18 +84,26 @@ body {
     align-items: center;
     justify-content: center;
     gap: 0.35rem;
-    height: 28px;
-    padding: 0 0.75rem;
-    border-radius: 7px;
+    height: 30px;
+    padding: 0 0.8rem;
+    border-radius: 8px;
     background: #fff;
-    border: 1px solid rgba(22, 36, 71, 0.12);
-    box-shadow: 0 1px 1px rgba(27, 44, 86, 0.05);
+    border: 0;
+    box-shadow: var(--shadow-btn);
     font-weight: 700;
     color: var(--color-ink);
-    transition: background 0.15s;
+    transition:
+      background 0.15s,
+      box-shadow 0.15s,
+      transform 0.1s;
   }
   .btn:hover {
-    background: #f7f9fc;
+    background: #fbfcfe;
+    box-shadow: var(--shadow-btn-hover);
+  }
+  .btn:active:not(:disabled) {
+    transform: translateY(0.5px);
+    box-shadow: var(--shadow-btn);
   }
   .btn:disabled {
     opacity: 0.45;
@@ -114,12 +125,20 @@ body {
   .btn-navy:hover {
     background: #233a6e;
   }
+  .btn-crit {
+    background: var(--color-crit);
+    color: #fff;
+  }
+  .btn-crit:hover {
+    background: #e2342a;
+  }
   .field {
     height: 34px;
     width: 100%;
     border-radius: 8px;
-    border: 1px solid rgba(22, 36, 71, 0.14);
+    border: 1px solid rgba(22, 36, 71, 0.1);
     background: #fff;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05) inset;
     padding: 0 0.7rem;
     font-weight: 600;
     outline: none;
@@ -129,9 +148,10 @@ body {
     box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.18);
   }
   .card {
-    background: rgba(255, 255, 255, 0.78);
-    border: 1px solid rgba(22, 36, 71, 0.08);
-    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 0;
+    border-radius: 12px;
+    box-shadow: var(--shadow-card);
   }
   .section-label {
     font-size: 11px;
@@ -156,6 +176,29 @@ body {
   100% {
     box-shadow: 0 0 0 7px rgba(255, 59, 48, 0);
   }
+}
+
+/* iOS Safari zooms into any focused control under 16px; keep phones at 16px so switching tabs never zooms. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea,
+  .field {
+    font-size: 16px !important;
+  }
+}
+
+html,
+body {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+button,
+a,
+[role="button"],
+nav {
+  touch-action: manipulation;
 }
 
 @media (prefers-reduced-motion: reduce) {

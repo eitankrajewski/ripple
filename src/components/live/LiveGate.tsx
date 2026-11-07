@@ -95,7 +95,7 @@ export function LiveGate() {
                     type="button"
                     key={r}
                     onClick={() => setRole(r)}
-                    className={clsx("rounded-[9px] border px-2.5 py-2 text-left transition-colors", role === r ? "border-navy bg-navy text-white" : "border-navy/12 bg-white hover:bg-navy/[0.03]")}
+                    className={clsx("rounded-[10px] px-2.5 py-2 text-left transition-all", role === r ? "bg-navy text-white shadow-[0_4px_12px_-4px_rgba(27,44,86,0.5)]" : "bg-white shadow-[var(--shadow-btn)] hover:shadow-[var(--shadow-btn-hover)]")}
                   >
                     <div className="flex items-center gap-1.5 font-extrabold">
                       {ROLES[r].station && <ChefHat className="size-3.5" />}

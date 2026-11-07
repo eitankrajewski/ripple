@@ -71,6 +71,9 @@ export type LiveAction =
   | { type: "item_done"; orderId: string; menuItemId: string; station: StationId }
   | { type: "station_added"; station: PlacedStation }
   | { type: "station_removed"; id: string }
+  | { type: "station_moved"; id: string; x: number; z: number; rot: number }
+  | { type: "staff_moved"; from: StationId; to: StationId }
+  | { type: "hold_order"; orderId: string }
   | { type: "menu_item_added"; item: NewMenuItem }
   | { type: "ingredient_added"; ingredient: NewIngredient }
   | { type: "picked_up"; orderId: string }
