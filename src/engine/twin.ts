@@ -384,6 +384,11 @@ export function deriveState(k: Kitchen): DigitalTwinState {
       projectedReadyInMinutes: op ? op.readyIn : 0,
       blockedBy: op?.blockedBy,
       lateBecause: op?.lateBecause,
+      fireInMinutes: op ? (op.fireIn ?? (o.consumed ? null : 0)) : null,
+      code: o.code,
+      dasher: o.dasher ? { name: o.dasher.name, etaMinutes: o.dasher.etaMin - now } : undefined,
+      packed: o.packed,
+      externalId: o.externalId,
     };
   });
 

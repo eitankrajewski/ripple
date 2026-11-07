@@ -1,11 +1,31 @@
 import clsx from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
-import { CircleHelp, LayoutGrid, LogOut, PanelLeft, PanelRight, Pause, Play, Plus, RotateCcw, Users, Waves, Zap } from "lucide-react";
+import { Box, CircleHelp, Columns3, LayoutGrid, LogOut, PanelLeft, PanelRight, Pause, Play, Plus, RotateCcw, Users, Waves, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ROLES } from "../live/roles";
 import { useCan, useTwin, type Mode, type Speed } from "../store";
 import { AlertBar } from "./AlertBar";
+import { DoorDashPanel } from "./live/DoorDashPanel";
 import { NewOrderForm } from "./live/NewOrderForm";
+
+function ViewSwitch() {
+  const view = useTwin((s) => s.mainView);
+  const setView = useTwin((s) => s.setMainView);
+  return (
+    <div className="hidden items-center rounded-[9px] bg-navy/[0.07] p-0.5 lg:flex" role="tablist" aria-label="View">
+      {(
+        [
+          ["3d", "3D kitchen", Box],
+          ["board", "Board: drag orders between stations", Columns3],
+        ] as const
+      ).map(([id, label, Icon]) => (
+        <button key={id} role="tab" aria-selected={view === id} title={label} onClick={() => setView(id)} className={clsx("flex h-6 w-8 items-center justify-center rounded-[7px]", view === id ? "bg-white text-ink shadow-sm" : "text-mute hover:text-ink")}>
+          <Icon className="size-4" />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function ModeSwitch() {
   const mode = useTwin((s) => s.mode);
@@ -25,7 +45,14 @@ function ModeSwitch() {
           className={clsx("flex h-6 items-center gap-1.5 rounded-[7px] px-2.5 text-[12px] font-bold", mode === o.id ? "bg-white text-ink shadow-sm" : "text-mute hover:text-ink")}
         >
           {o.id === "live" && <span className={clsx("size-1.5 rounded-full", mode === "live" ? "bg-ok" : "bg-faint")} />}
-          {o.label}
+          {o.id === "sim" ? (
+            <>
+              <span className="sm:hidden">Sim</span>
+              <span className="hidden sm:inline">Simulation</span>
+            </>
+          ) : (
+            o.label
+          )}
         </button>
       ))}
     </div>
@@ -48,7 +75,7 @@ function Popover({ open, children, className }: { open: boolean; children: React
   return (
     <AnimatePresence>
       {open && (
-        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.14 }} className={clsx("sidebar absolute top-10 right-0 z-50 rounded-[14px]! bg-[#f7f9fc]/97!", className)}>
+        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.14 }} className={clsx("sidebar scroll-thin fixed inset-x-2 top-[56px] z-50 max-h-[80vh] overflow-y-auto rounded-[14px]! bg-[#f7f9fc]/97! sm:absolute sm:inset-x-auto sm:top-10 sm:right-0", className)}>
           {children}
         </motion.div>
       )}
@@ -64,8 +91,23 @@ function NewOrderButton() {
         <Plus className="size-[17px]" />
         <span className="hidden xl:inline">New order</span>
       </button>
-      <Popover open={open} className="w-[320px] p-3">
+      <Popover open={open} className="p-3 sm:w-[320px]">
         <NewOrderForm onDone={() => setOpen(false)} />
+      </Popover>
+    </div>
+  );
+}
+
+function DoorDashButton() {
+  const { open, setOpen, ref } = usePopover();
+  return (
+    <div ref={ref} className="relative">
+      <button className="tbtn" onClick={() => setOpen((v) => !v)} title="DoorDash orders">
+        <span className="flex size-[18px] items-center justify-center rounded-[5px] bg-[#ff3008] text-[10px] font-black text-white">D</span>
+        <span className="hidden xl:inline">DoorDash</span>
+      </button>
+      <Popover open={open} className="p-3 sm:w-[320px]">
+        <DoorDashPanel />
       </Popover>
     </div>
   );
@@ -88,7 +130,7 @@ function AccountMenu() {
           <span className="block text-[10.5px] font-semibold text-mute">{role.label}</span>
         </span>
       </button>
-      <Popover open={open} className="w-[260px] p-1.5">
+      <Popover open={open} className="p-1.5 sm:w-[260px]">
         <div className="px-2.5 py-2">
           <div className="font-extrabold">{session.me.name}</div>
           <div className="text-[12px] text-mute">
@@ -129,7 +171,7 @@ export function Toolbar({ onToggleNav, onToggleInspector, onOpenInspector, showP
   const sim = mode === "sim";
 
   return (
-    <header className="matte relative z-40 flex h-[52px] shrink-0 items-center gap-2 px-3">
+    <header className="matte relative z-40 flex h-[52px] shrink-0 items-center gap-1.5 px-2 sm:gap-2 sm:px-3">
       {showPanels && (
         <button className="tbtn hidden lg:inline-flex" onClick={onToggleNav} title="Show / hide navigator">
           <PanelLeft className="size-[18px] text-mute" />
@@ -142,10 +184,11 @@ export function Toolbar({ onToggleNav, onToggleInspector, onOpenInspector, showP
         <div className="hidden text-[14px] font-extrabold sm:block">RIPPLE</div>
       </div>
       <ModeSwitch />
+      {showPanels && <ViewSwitch />}
       {sim && (
         <>
           <span className="mx-0.5 hidden h-5 w-px bg-navy/12 sm:block" />
-          <button className="tbtn" onClick={reset} title="Reset to the start">
+          <button className="tbtn hidden sm:inline-flex" onClick={reset} title="Reset to the start">
             <RotateCcw className="size-[17px]" />
           </button>
           <button className="tbtn" onClick={togglePause} title={paused ? "Run the simulation" : "Pause the simulation"}>
@@ -165,12 +208,13 @@ export function Toolbar({ onToggleNav, onToggleInspector, onOpenInspector, showP
               </button>
             ))}
           </div>
-          <button className="tbtn" onClick={sendRush} title="Send a big rush order">
+          <button className="tbtn hidden sm:inline-flex" onClick={sendRush} title="Send a big rush order">
             <Zap className="size-[17px]" />
             <span className="hidden xl:inline">Rush order</span>
           </button>
         </>
       )}
+      {!sim && signedIn && canAdd && <DoorDashButton />}
       {!sim && signedIn && canAdd && <NewOrderButton />}
       {!sim && <AccountMenu />}
       <button className="tbtn" onClick={() => setHelp(true)} title="Help: what the numbers mean and how to get around" aria-label="Help">

@@ -22,5 +22,7 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Imports the Node-side webhook module; covered by vitest instead.
+  "exclude": ["src/live/doordash.test.ts"]
 }

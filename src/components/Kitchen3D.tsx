@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { ChevronLeft, ChevronRight, Minus, Plus, Scan } from "lucide-react";
 import { Component, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import * as THREE from "three";
+import { useDrag, type DropTarget } from "../lib/drag";
 import type { RiskLevel } from "../engine/types";
 import { AREA_ORDER, culpritArea, useAreas, type Area, type AreaId } from "../lib/areas";
 import { pct, RISK_HEX } from "../lib/ui";
@@ -419,6 +420,8 @@ class GLBoundary extends Component<{ children: ReactNode }, { failed: boolean }>
 
 type MarkerEls = Partial<Record<AreaId, HTMLElement | null>>;
 
+const DROP_OF: Partial<Record<AreaId, DropTarget>> = { prep: "prep", cook: "cook", pack: "pack", pickup: "ready" };
+
 function MarkerTracker({ place }: { place: (id: AreaId, x: number, y: number, visible: boolean) => void }) {
   const v = useRef(new THREE.Vector3());
   useFrame(({ camera, size }) => {
@@ -437,6 +440,8 @@ function Markers({ register }: { register: (id: AreaId, el: HTMLElement | null) 
   const selectArea = useTwin((s) => s.selectArea);
   const traced = useTwin((s) => s.state.orders.find((o) => o.id === s.tracedOrderId));
   const traceEnd = traced ? AREA_ORDER.indexOf(culpritArea(traced) ?? "pickup") : -1;
+  const dragOver = useDrag((s) => s.over);
+  const dragging = useDrag((s) => !!s.order);
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
       {areas.map((a) => {
@@ -447,10 +452,13 @@ function Markers({ register }: { register: (id: AreaId, el: HTMLElement | null) 
           <div key={a.id} ref={(el) => register(a.id, el)} className="pointer-events-auto absolute top-0 left-0 will-change-transform" style={{ visibility: "hidden" }}>
         <button
           onClick={onSelect}
+          data-drop={DROP_OF[a.id]}
           className={clsx(
             "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-bold whitespace-nowrap shadow-[0_4px_14px_-6px_rgba(0,0,0,0.25)] backdrop-blur-md transition-all select-none",
             selected ? "border-transparent bg-navy text-white" : "border-navy/10 bg-white/90 text-ink hover:bg-white",
             dim && "opacity-40",
+            dragging && DROP_OF[a.id] && "scale-110 border-dashed border-accent/60",
+            dragging && DROP_OF[a.id] && dragOver === DROP_OF[a.id] && "scale-125 border-solid border-accent bg-accent! text-white",
           )}
         >
           <span className={clsx("size-2 rounded-full", a.risk === "critical" && !selected && "pulse-dot")} style={{ background: selected ? "#fff" : RISK_HEX[a.risk] }} />

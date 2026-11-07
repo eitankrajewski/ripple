@@ -29,7 +29,13 @@ Switch the toolbar from **Simulation** to **Live** to run the real kitchen:
 - Station devices get a focused ticket screen. Tapping **Prep done → Cook** moves the order to the next stage on every screen.
 - The host and manager enter orders with **New order**.
 
-In this build, kitchens are stored in the browser, so try it with two tabs on one computer. See [`docs/live-mode.md`](docs/live-mode.md) for the roles, permissions, data model and the plan for a hosted backend (Supabase or Firebase) so real phones and tablets can connect.
+- **Prep fire queue:** the prep screen sorts tickets into **Start now** and **Start later**, using each order's fire time (timed so it's ready as the Dasher arrives).
+- **Pack and handoff:** Expo ticks items into the bag and checks the Dasher's name and code at handoff.
+- **Board:** managers drag any ticket to any station from the Board, or from the navigator onto a 3D station label. Android phones vibrate on pick-up and drop.
+- **DoorDash:** orders arrive through `POST /api/doordash` (signed webhooks) or the **DoorDash** test-order button.
+- **Phones and tablets:** works in a phone or tablet browser, with a bottom tab bar and swipe-right to complete a ticket.
+
+With Supabase configured (`.env.example`), devices anywhere can join. Without it, kitchens stay in this browser (try two tabs). The setup, roles, data model and webhook format are in [`docs/live-mode.md`](docs/live-mode.md). The hackathon pitch and the happy- and sad-path demo script are in [`docs/demo-script.md`](docs/demo-script.md).
 
 Press **?** in the toolbar for an explanation of every number and how to get around.
 
@@ -52,7 +58,9 @@ Optional AI wording: create `.env.local` with `GEMINI_API_KEY=...` (never commit
 src/engine/      seed data, simulation (ingestEvent, tick, project), strategies, what-if scenarios, tests
 src/components/  Kitchen3D (Three.js scene), Toolbar + AlertBar, Navigator, Inspector, Plan / Ask AI tabs, HelpSheet, shared kit
 src/components/live/  sign-in (LiveGate), StationScreen, NewOrderForm, TeamPanel
-src/live/        roles & permissions, live event types, event replay, LiveBackend (local preview implementation)
+src/live/        roles & permissions, live event types, event replay, LiveBackend (local + Supabase)
+supabase/        config + SQL migration (tables, RLS, join functions, realtime)
+api/doordash.ts  signed DoorDash-style order webhook → live kitchen (mapping in api/_doordash.ts)
 src/lib/areas.ts  derives per-area status shared by the 3D scene and the inspector
 src/store.ts  zustand store wiring the engine to the UI
 api/explain.ts   Vercel serverless function for optional Gemini wording

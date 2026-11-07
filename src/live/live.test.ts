@@ -67,3 +67,40 @@ describe("live kitchen", () => {
     expect(members.map((m) => m.id)).toEqual(["a"]);
   });
 });
+
+describe("manager moves, packing, couriers", () => {
+  it("lets a manager move an order to any station, forward or back", () => {
+    const log = [ev(1, manager, order)];
+    let k = replay(START, log);
+    const id = k.orders[0].id;
+    log.push(ev(10, manager, { type: "move_order", orderId: id, to: "pack" }));
+    k = replay(START, log);
+    expect(deriveState(k).orders[0].status).toBe("packing");
+    log.push(ev(20, manager, { type: "move_order", orderId: id, to: "cook" }));
+    k = replay(START, log);
+    expect(deriveState(k).orders[0].status).toBe("cooking");
+    expect(allowed("cook", { type: "move_order", orderId: id, to: "pack" })).toBe(false);
+  });
+
+  it("tracks the pack checklist item by item", () => {
+    const k = replay(START, [ev(1, manager, order)]);
+    const id = k.orders[0].id;
+    applyLiveEvent(k, ev(5, expo, { type: "pack_item", orderId: id, menuItemId: "beef_burger", checked: true }));
+    expect(deriveState(k).orders[0].packed).toEqual(["beef_burger"]);
+    applyLiveEvent(k, ev(6, expo, { type: "pack_item", orderId: id, menuItemId: "beef_burger", checked: false }));
+    expect(deriveState(k).orders[0].packed).toEqual([]);
+  });
+
+  it("times a DoorDash order to the Dasher and follows ETA changes", () => {
+    const dd: LiveAction = { type: "order_received", source: "doordash", customer: "Sam", items: [{ menuItemId: "beef_burger", qty: 1 }], dasherName: "Alex R.", dasherEtaMinutes: 25, externalId: "dd-1" };
+    const integration: Actor = { memberId: "doordash", name: "DoorDash", role: "integration" };
+    const k = replay(START, [ev(1, integration, dd), ev(2, integration, dd)]);
+    expect(k.orders).toHaveLength(1);
+    const o = deriveState(k).orders[0];
+    expect(o.dasher?.name).toBe("Alex R.");
+    expect(o.fireInMinutes).toBeGreaterThan(10);
+    applyLiveEvent(k, ev(3, integration, { type: "dasher_update", externalId: "dd-1", etaMinutes: 3 }));
+    expect(deriveState(k).orders[0].fireInMinutes).toBe(0);
+    expect(allowed("integration", { type: "approve_plan", plan: { id: "protect_pickups", label: "", heldOrderIds: [], deferredOrderIds: [], batch: false } })).toBe(false);
+  });
+});

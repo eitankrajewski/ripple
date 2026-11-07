@@ -1,4 +1,5 @@
 import { allowed } from "./roles";
+import { SupabaseBackend } from "./supabaseBackend";
 import type { Actor, KitchenSpace, LiveAction, LiveEvent, LiveSession, Member, Role } from "./types";
 
 export type Presence = Record<string, number>;
@@ -15,8 +16,17 @@ export interface LiveBackend {
   joinKitchen(joinCode: string, name: string, role: Role): Promise<LiveSession>;
   leave(session: LiveSession): Promise<void>;
   load(kitchenId: string): Promise<LiveEvent[]>;
-  publish(session: LiveSession, action: LiveAction): Promise<LiveEvent>;
+  /** `as` lets a trusted device (manager/host) post on behalf of the DoorDash integration. */
+  publish(session: LiveSession, action: LiveAction, as?: Actor): Promise<LiveEvent>;
   subscribe(session: LiveSession, onEvent: (e: LiveEvent) => void, onPresence: (p: Presence) => void): () => void;
+}
+
+export const DOORDASH_ACTOR: Actor = { memberId: "doordash", name: "DoorDash", role: "integration" };
+
+export function actorFor(session: LiveSession, as?: Actor): Actor {
+  const me: Actor = { memberId: session.me.id, name: session.me.name, role: session.me.role };
+  if (as?.role === "integration" && (me.role === "manager" || me.role === "host")) return as;
+  return me;
 }
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -96,8 +106,8 @@ export class LocalBackend implements LiveBackend {
     return this.readLog(kitchenId);
   }
 
-  async publish(session: LiveSession, action: LiveAction) {
-    const actor: Actor = { memberId: session.me.id, name: session.me.name, role: session.me.role };
+  async publish(session: LiveSession, action: LiveAction, as?: Actor) {
+    const actor = actorFor(session, as);
     if (!allowed(actor.role, action)) throw new Error("Your role can't do that.");
     const event: LiveEvent = {
       id: `${this.device}:${++this.seq}`,
@@ -140,4 +150,9 @@ export class LocalBackend implements LiveBackend {
   }
 }
 
-export const backend: LiveBackend = new LocalBackend();
+const RAW_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const SUPABASE_URL = RAW_URL?.startsWith("/") ? `${location.origin}${RAW_URL}` : RAW_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+/** Hosted (Supabase) when configured, otherwise the in-browser preview. */
+export const backend: LiveBackend = SUPABASE_URL && SUPABASE_KEY ? new SupabaseBackend(SUPABASE_URL, SUPABASE_KEY) : new LocalBackend();

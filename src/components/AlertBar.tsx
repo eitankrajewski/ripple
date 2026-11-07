@@ -144,7 +144,8 @@ export function AlertBar({ onOpenInspector }: { onOpenInspector: () => void }) {
         </span>
         {actions.length > 0 && (
           <span className="flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-extrabold text-white" style={{ background: RISK_HEX[actions.some((a) => a.risk === "critical") ? "critical" : "warning"] }}>
-            {actions.length} to do
+            {actions.length}
+            <span className="hidden sm:inline">&nbsp;to do</span>
           </span>
         )}
         <ChevronDown className={clsx("size-4 shrink-0 text-mute transition-transform", open && "rotate-180")} />
@@ -157,7 +158,7 @@ export function AlertBar({ onOpenInspector }: { onOpenInspector: () => void }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.16 }}
-            className="sidebar absolute top-10 left-1/2 z-50 max-h-[70vh] bg-[#f7f9fc]/97! w-[min(560px,94vw)] -translate-x-1/2 divide-y divide-navy/8 overflow-y-auto rounded-[14px]! scroll-thin"
+            className="sidebar fixed inset-x-2 top-[56px] z-50 max-h-[70vh] bg-[#f7f9fc]/97! sm:absolute sm:inset-x-auto sm:top-10 sm:left-1/2 sm:w-[min(560px,94vw)] sm:-translate-x-1/2 divide-y divide-navy/8 overflow-y-auto rounded-[14px]! scroll-thin"
           >
             <Section title="What changed">
               {latest ? (

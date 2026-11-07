@@ -31,6 +31,10 @@ export interface SimOrder {
   deferred: boolean;
   batched: boolean;
   readyAtMin?: number;
+  code: string;
+  dasher?: { name: string; etaMin: number };
+  packed: string[];
+  externalId?: string;
 }
 
 export type PlanMode = "default" | StrategyId;
@@ -174,8 +178,23 @@ function scheduleNextOrder(k: Kitchen) {
   k.nextOrderAtSeconds = k.clockSeconds + lo + Math.round(rand(k) * (hi - lo));
 }
 
-function addOrder(k: Kitchen, seed: SeedOrder, isRush: boolean): SimOrder {
+const CODE_CHARS = "ACDEFHJKLMNPRTVWXY3479";
+const DASHERS = ["Alex R.", "Priya S.", "Marcus T.", "Jin W.", "Sofia M.", "Omar K.", "Hana L.", "Diego P."];
+
+/** Deterministic 3-character pickup code (no randomness so the seeded simulation is unchanged). */
+export function pickupCode(num: number) {
+  let n = (num * 2654435761) >>> 0;
+  let out = "";
+  for (let i = 0; i < 3; i++) {
+    out += CODE_CHARS[n % CODE_CHARS.length];
+    n = Math.floor(n / CODE_CHARS.length);
+  }
+  return out;
+}
+
+function addOrder(k: Kitchen, seed: SeedOrder & { dasherName?: string; dasherEtaMinutes?: number; externalId?: string }, isRush: boolean): SimOrder {
   const now = nowMinutes(k);
+  const delivery = seed.source === "doordash";
   const o: SimOrder = {
     id: `o${k.nextNum}`,
     num: k.nextNum,
@@ -191,7 +210,15 @@ function addOrder(k: Kitchen, seed: SeedOrder, isRush: boolean): SimOrder {
     held: false,
     deferred: false,
     batched: false,
+    code: pickupCode(k.nextNum),
+    packed: [],
+    externalId: seed.externalId,
   };
+  if (delivery) {
+    const eta = seed.dasherEtaMinutes ?? seed.pickupDeadlineMinutes;
+    o.dasher = { name: seed.dasherName ?? DASHERS[k.nextNum % DASHERS.length], etaMin: now + eta };
+    o.deadlineMin = now + eta;
+  }
   k.nextNum += 1;
   k.orders.push(o);
   return o;
@@ -254,6 +281,7 @@ export function ingestEvent(k: Kitchen, event: OrderEvent): Kitchen {
     case "rush_order": {
       const isRush = event.type === "rush_order";
       const source = event.source ?? "doordash";
+      if (event.externalId && k.orders.some((x) => x.externalId === event.externalId)) break;
       const promise = cfg.promises.find((p) => p.source === source)!;
       const seed: SeedOrder = {
         customer: event.customer ?? (isRush ? cfg.rush.customer : "Guest"),
@@ -261,7 +289,7 @@ export function ingestEvent(k: Kitchen, event: OrderEvent): Kitchen {
         items: event.items ?? (isRush ? cfg.rush.items : [{ menuItemId: "beef_burger", qty: 1 }]),
         pickupDeadlineMinutes: event.pickupDeadlineMinutes ?? (isRush ? cfg.rush.pickupDeadlineMinutes : promise.pickupMinutes),
       };
-      const o = addOrder(k, seed, isRush);
+      const o = addOrder(k, { ...seed, dasherName: event.dasherName, dasherEtaMinutes: event.dasherEtaMinutes, externalId: event.externalId }, isRush);
       const need = orderNeeds(cfg, o.items);
       const count = itemCount(o.items);
       if (isRush) {
@@ -320,6 +348,32 @@ export function ingestEvent(k: Kitchen, event: OrderEvent): Kitchen {
       if (STATION_IDS.every((s) => o.remaining[s] <= 0)) markReady(k, o);
       break;
     }
+    case "move_order": {
+      if (event.orderId && event.to) moveOrder(k, event.orderId, event.to, event.by);
+      break;
+    }
+    case "pack_item": {
+      const o = k.orders.find((x) => x.id === event.orderId);
+      if (!o || !event.menuItemId || !o.items.some((i) => i.menuItemId === event.menuItemId)) break;
+      o.packed = o.packed.filter((m) => m !== event.menuItemId);
+      if (event.checked !== false) o.packed.push(event.menuItemId);
+      break;
+    }
+    case "dasher_update": {
+      const o = k.orders.find((x) => (event.orderId && x.id === event.orderId) || (event.externalId && x.externalId === event.externalId));
+      if (!o || event.dasherEtaMinutes === undefined) break;
+      const before = o.deadlineMin - nowMinutes(k);
+      o.deadlineMin = nowMinutes(k) + event.dasherEtaMinutes;
+      if (o.dasher) o.dasher.etaMin = o.deadlineMin;
+      const d = Math.round(event.dasherEtaMinutes - before);
+      pushFeed(k, "order", `#${o.num} pickup moved ${d >= 0 ? `${d}m later` : `${-d}m earlier`} · now in ${Math.round(event.dasherEtaMinutes)}m`, o.id);
+      break;
+    }
+    case "handoff_mismatch": {
+      const o = k.orders.find((x) => x.id === event.orderId);
+      if (o) pushFeed(k, "system", `Wrong handoff stopped: #${o.num} is for ${o.dasher?.name ?? o.customer} (code ${o.code})${event.by ? ` · ${event.by}` : ""}`, o.id);
+      break;
+    }
     case "picked_up": {
       const o = k.orders.find((x) => x.id === event.orderId);
       if (!o) break;
@@ -353,6 +407,36 @@ function markReady(k: Kitchen, o: SimOrder) {
   o.deferred = false;
   const late = o.readyAtMin > o.deadlineMin + k.config.lateGraceMinutes;
   pushFeed(k, "ready", `#${o.num} ready for pickup${late ? " (late)" : ""}`, o.id);
+}
+
+/** Manager override: put an order at any station, forward or back (e.g. to re-cook an item). */
+export function moveOrder(k: Kitchen, orderId: string, to: StationId | "ready", by?: string): Kitchen {
+  const o = k.orders.find((x) => x.id === orderId);
+  if (!o) return k;
+  const idx = to === "ready" ? STATION_IDS.length : STATION_IDS.indexOf(to);
+  if (idx > 0 && !o.consumed) {
+    if (!canAllocate(k, o)) {
+      pushFeed(k, "system", `#${o.num} can't skip prep: not enough stock`, o.id);
+      return k;
+    }
+    consume(k, o);
+  }
+  const base = workFor(k.config, o.items);
+  STATION_IDS.forEach((s, i) => {
+    if (i < idx) o.remaining[s] = 0;
+    else if (o.remaining[s] <= 0) o.remaining[s] = base[s];
+  });
+  o.held = false;
+  o.deferred = false;
+  if (idx < STATION_IDS.length) {
+    o.readyAtMin = undefined;
+    if (idx <= STATION_IDS.indexOf("pack")) o.packed = [];
+  }
+  const name = to === "ready" ? "the ready shelf" : (k.config.stations.find((s) => s.id === to)?.name ?? to);
+  pushFeed(k, "system", `#${o.num} moved to ${name}${by ? ` · ${by}` : ""}`, o.id);
+  if (to === "ready" && isOpen(o)) markReady(k, o);
+  evaluatePhase(k);
+  return k;
 }
 
 export function sortForPlan(k: Kitchen, orders: SimOrder[], mode: PlanMode): SimOrder[] {
@@ -485,7 +569,10 @@ export function advanceTo(k: Kitchen, seconds: number): Kitchen {
 // Projection: deterministic "what happens next" for a given plan.
 // ---------------------------------------------------------------------------
 
+export const FIRE_BUFFER_MINUTES = 2;
+
 export interface OrderProjection {
+  fireIn?: number | null;
   status: OrderStatus;
   risk: RiskLevel;
   reason: string;
@@ -654,6 +741,7 @@ export function project(k: Kitchen, opts: PlanOptions): Projection {
       pickupIn,
       lateBecause: late || tight ? lateBecause : undefined,
       late,
+      fireIn: o.consumed ? null : Math.max(0, Math.round((pickupIn - ready - FIRE_BUFFER_MINUTES) * 10) / 10),
     };
   }
 

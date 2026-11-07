@@ -15,10 +15,10 @@ import {
 import { applyScenario, parseScenario, runScenario, type ScenarioResult, type ScenarioSpec } from "./engine/scenario";
 import { deriveState, strategyPlanForApproval } from "./engine/twin";
 import type { DigitalTwinState, Explanation, StrategyId } from "./engine/types";
-import { applyLiveEvent, byOrder, membersFrom, replay } from "./live/apply";
+import { applyAction, applyLiveEvent, byOrder, membersFrom, replay } from "./live/apply";
 import { backend, type Presence } from "./live/backend";
 import { can } from "./live/roles";
-import type { LiveAction, LiveEvent, LiveSession, Member, Permission, Role } from "./live/types";
+import type { Actor, LiveAction, LiveEvent, LiveSession, Member, Permission, Role } from "./live/types";
 import { buildPayload, fallbackExplanation, requestExplanation, requestWording, scenarioExplanation, scenarioPayload } from "./lib/explain";
 
 export type Speed = 1 | 2 | 4;
@@ -65,6 +65,7 @@ interface Store {
   mode: Mode;
   live: LiveState;
   helpOpen: boolean;
+  mainView: "3d" | "board";
 
   step: () => void;
   togglePause: () => void;
@@ -89,11 +90,14 @@ interface Store {
   clearScenario: () => void;
   setMode: (m: Mode) => void;
   setHelp: (open: boolean) => void;
+  setMainView: (v: "3d" | "board") => void;
   liveCreate: (kitchenName: string, managerName: string) => Promise<void>;
   liveJoin: (code: string, name: string, role: Role) => Promise<void>;
   liveLeave: () => Promise<void>;
-  liveDo: (action: LiveAction) => Promise<boolean>;
+  liveDo: (action: LiveAction, as?: Actor) => Promise<boolean>;
   setLiveView: (v: LiveState["view"]) => void;
+  /** Order-level actions (move, pack, handoff, check-off) that work in both modes. */
+  act: (action: LiveAction) => Promise<boolean>;
 }
 
 let toastSeq = 0;
@@ -185,6 +189,7 @@ export const useTwin = create<Store>((set, get) => {
     mode: "sim",
     live: EMPTY_LIVE,
     helpOpen: false,
+    mainView: "3d",
 
     step: () => {
       const session = get().live.session;
@@ -283,6 +288,7 @@ export const useTwin = create<Store>((set, get) => {
     clearScenario: () => set({ scenario: EMPTY_SCENARIO }),
 
     setHelp: (helpOpen) => set({ helpOpen }),
+    setMainView: (mainView) => set({ mainView }),
     setMode: (mode) => {
       if (mode === get().mode) return;
       const reset = { tracedOrderId: null, previewStrategyId: null, area: null, tab: "inspect" as Tab, scenario: EMPTY_SCENARIO, toast: null };
@@ -291,7 +297,11 @@ export const useTwin = create<Store>((set, get) => {
         set({ mode, kitchen: createLiveKitchen(Date.now()), live: EMPTY_LIVE, ...reset });
         commit();
         const session = backend.resume();
-        if (session) void connect(session);
+        if (session)
+          connect(session).catch(() => {
+            sessionStorage.removeItem("ripple.live.session");
+            set({ live: EMPTY_LIVE, ...toastMsg("Your last kitchen session expired. Sign in again.", "warn") });
+          });
       } else {
         disconnect();
         set({ mode, kitchen: simKitchen ?? createKitchen(), live: EMPTY_LIVE, ...reset });
@@ -311,11 +321,11 @@ export const useTwin = create<Store>((set, get) => {
       set({ kitchen: createLiveKitchen(Date.now()), live: EMPTY_LIVE, tracedOrderId: null, area: null });
       commit();
     },
-    liveDo: async (action) => {
+    liveDo: async (action, as) => {
       const session = get().live.session;
       if (!session) return false;
       try {
-        receive(await backend.publish(session, action));
+        receive(await backend.publish(session, action, as));
         return true;
       } catch (err) {
         set(toastMsg(err instanceof Error ? err.message : "Couldn't send that update.", "crit"));
@@ -323,6 +333,12 @@ export const useTwin = create<Store>((set, get) => {
       }
     },
     setLiveView: (view) => set({ live: { ...get().live, view } }),
+    act: async (action) => {
+      if (isLive()) return get().liveDo(action);
+      applyAction(get().kitchen, action, "Manager");
+      commit();
+      return true;
+    },
   };
 });
 

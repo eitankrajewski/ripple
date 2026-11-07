@@ -1,7 +1,7 @@
 import type { OrderItem, OrderSource, StationId, StrategyId } from "../engine/types";
 
 /** What a signed-in device is allowed to see and do in a kitchen. */
-export type Role = "manager" | "prep" | "cook" | "expo" | "host";
+export type Role = "manager" | "prep" | "cook" | "expo" | "host" | "integration";
 
 export type Permission =
   | "view_twin"
@@ -11,7 +11,10 @@ export type Permission =
   | "correct_stock"
   | "approve_plan"
   | "hold_orders"
-  | "manage_team";
+  | "manage_team"
+  | "move_orders"
+  | "pack"
+  | "update_pickup";
 
 export interface RoleInfo {
   id: Role;
@@ -48,7 +51,20 @@ export interface Actor {
 export type LiveAction =
   | { type: "member_joined"; member: Member }
   | { type: "member_left"; memberId: string }
-  | { type: "order_received"; source: OrderSource; customer: string; items: OrderItem[] }
+  | {
+      type: "order_received";
+      source: OrderSource;
+      customer: string;
+      items: OrderItem[];
+      dasherName?: string;
+      dasherEtaMinutes?: number;
+      /** DoorDash order id; repeated deliveries of the same webhook are ignored. */
+      externalId?: string;
+    }
+  | { type: "move_order"; orderId: string; to: StationId | "ready" }
+  | { type: "pack_item"; orderId: string; menuItemId: string; checked: boolean }
+  | { type: "dasher_update"; orderId?: string; externalId?: string; etaMinutes: number }
+  | { type: "handoff_mismatch"; orderId: string }
   | { type: "task_done"; orderId: string; station: StationId }
   | { type: "picked_up"; orderId: string }
   | { type: "stock_correction"; ingredientId: string; newStock: number }

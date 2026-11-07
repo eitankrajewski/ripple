@@ -5,7 +5,44 @@ RIPPLE has two sides:
 - **Simulation**: the seeded practice kitchen (speed up, rush, reset, what-ifs).
 - **Live**: the real kitchen. A manager opens it, staff devices join it, and every check-off updates every screen.
 
-This document describes the user scheme and how devices interact with a kitchen. The current build ships a **local preview backend** (kitchens live in the browser; tabs act as devices). Moving to real phones and tablets means implementing the same `LiveBackend` interface on a hosted service. The UI and engine don't change.
+This document describes the user scheme and how devices interact with a kitchen. There are two backends behind the same `LiveBackend` interface:
+
+- **Supabase** (`src/live/supabaseBackend.ts`) is used when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set. Real phones, tablets and laptops can join from anywhere.
+- **Local preview** (`LocalBackend`) is used otherwise. Kitchens live in the browser and tabs act as devices.
+
+## Supabase setup
+
+1. Create a project at supabase.com.
+2. Turn on **Authentication → Sign In / Providers → Anonymous sign-ins**. Devices sign in anonymously, so staff don't need accounts.
+3. Run `supabase/migrations/20261107000000_live_kitchen.sql`, either in the SQL editor or with `npx supabase link && npx supabase db push`. It creates the tables, the row-level security policies, the `create_kitchen` / `join_kitchen` functions and the Realtime publication.
+4. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (Project Settings → API). On Vercel, add the same variables plus `SUPABASE_SERVICE_ROLE_KEY` and `RIPPLE_WEBHOOK_SECRET` for the DoorDash endpoint.
+
+To run Supabase locally instead, run `npx supabase start` (needs Docker). Then set `VITE_SUPABASE_URL=/supabase` and `SUPABASE_PROXY_TARGET=http://127.0.0.1:54321` so the dev server proxies it, which lets a phone on your Wi-Fi join through `http://<your-computer-ip>:5173`. Server-side routes also need `SUPABASE_URL=http://127.0.0.1:54321`.
+
+## DoorDash orders
+
+`POST /api/doordash` (`api/doordash.ts`, with the mapping in `api/_doordash.ts`) accepts signed DoorDash-style webhooks:
+
+```json
+{
+  "event_type": "order.created",
+  "store": { "merchant_supplied_id": "<kitchen join code>" },
+  "order": {
+    "id": "dd-9001",
+    "customer": { "first_name": "Sam", "last_name": "Lee" },
+    "dasher": { "first_name": "Alex", "last_name": "Rivera" },
+    "estimated_pickup_time": "2026-11-07T19:30:00Z",
+    "items": [{ "merchant_supplied_id": "beef_burger", "name": "Beef Burger", "quantity": 2 }]
+  }
+}
+```
+
+- **Signature:** the `x-ripple-signature` header carries the hex HMAC-SHA256 of the raw body, keyed with `RIPPLE_WEBHOOK_SECRET`.
+- **Courier updates:** `order.dasher_eta_updated` moves the pickup time, and every device re-times that ticket.
+- **Retries:** repeated deliveries of the same order are ignored.
+- **Item matching:** items are matched by `merchant_supplied_id` or by name. Unknown items are reported back in the response.
+- **Real DoorDash:** production use needs DoorDash partner API access, and only `mapDoorDash` should need to change to follow DoorDash's exact payload.
+- **Testing without DoorDash:** managers and hosts can send test orders from the **DoorDash** button.
 
 ## Roles
 
@@ -49,6 +86,10 @@ TypeScript shapes live in `src/live/types.ts` (`KitchenSpace`, `Member`, `LiveEv
 | `stock_correction` | manager, prep | Sets an ingredient's on-hand count |
 | `approve_plan` | manager | Applies a strategy (holds, deferrals, batching) |
 | `release_order` / `cancel_order` | manager | Resolves held or deferred orders |
+| `move_order {orderId, to}` | manager | Puts an order at any station (forward or back) from the Board or by dragging onto the 3D labels |
+| `pack_item {orderId, menuItemId, checked}` | manager, expo | Pack checklist; **Packed** unlocks when every item is in the bag |
+| `dasher_update {orderId \| externalId, etaMinutes}` | manager, host, DoorDash | Moves the pickup time, which re-times the ticket's fire time |
+| `handoff_mismatch` | manager, expo, host | Logs a stopped wrong handoff (the name or code didn't match) |
 
 ## How devices stay in sync
 
@@ -77,13 +118,12 @@ interface LiveBackend {
 }
 ```
 
-- **Now:** `LocalBackend` (`src/live/backend.ts`) uses `localStorage` for kitchens and logs, `BroadcastChannel` for realtime, and `sessionStorage` for each tab's session.
-- **Next (suggested): Supabase.**
-  - **Auth** for manager accounts.
-  - **Postgres** tables above.
-  - **Row Level Security:** members can only read their kitchen. Insert on `events` checks the same rule as `allowed()` in a Postgres function.
-  - **Realtime** on `events` filtered by `kitchen_id` for `subscribe`, and **Presence** for who's online.
-  - Firebase (Auth + Firestore + security rules) maps the same way.
+- **`LocalBackend`:** `localStorage` holds kitchens and logs, `BroadcastChannel` handles realtime, and `sessionStorage` keeps each tab's session.
+- **`SupabaseBackend`:**
+  - **Sign-in:** anonymous Auth per device.
+  - **Opening and joining:** the `create_kitchen` and `join_kitchen` functions, so the join code is the only way into a kitchen.
+  - **Row-level security:** members only read their own kitchen. Inserts into `events` must use your own member id and real role, and pass `ripple_allowed()`, which mirrors `allowed()`. Managers and hosts may relay DoorDash orders.
+  - **Live updates:** Realtime `postgres_changes` delivers new events, and Realtime Presence shows who's online.
 
 ## Not yet covered
 

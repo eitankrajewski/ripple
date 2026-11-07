@@ -1,6 +1,6 @@
 import { advanceTo, approveStrategy, cancelOrder, createLiveKitchen, ingestEvent, releaseOrder, type Kitchen } from "../engine/engine";
 import { allowed } from "./roles";
-import type { LiveEvent, Member } from "./types";
+import type { LiveAction, LiveEvent, Member } from "./types";
 
 export const byOrder = (a: LiveEvent, b: LiveEvent) => a.at - b.at || a.ts - b.ts || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
@@ -8,11 +8,26 @@ export const byOrder = (a: LiveEvent, b: LiveEvent) => a.at - b.at || a.ts - b.t
 export function applyLiveEvent(k: Kitchen, e: LiveEvent) {
   advanceTo(k, e.at);
   if (!allowed(e.actor.role, e.action)) return;
-  const by = `${e.actor.name} (${e.actor.role})`;
-  const a = e.action;
+  applyAction(k, e.action, e.actor.role === "integration" ? e.actor.name : `${e.actor.name} (${e.actor.role})`);
+}
+
+/** Applies an action to any kitchen (live or simulated) without permission checks. */
+export function applyAction(k: Kitchen, a: LiveAction, by?: string) {
   switch (a.type) {
     case "order_received":
-      ingestEvent(k, { type: "order_received", source: a.source, customer: a.customer, items: a.items });
+      ingestEvent(k, { type: "order_received", source: a.source, customer: a.customer, items: a.items, dasherName: a.dasherName, dasherEtaMinutes: a.dasherEtaMinutes, externalId: a.externalId });
+      break;
+    case "move_order":
+      ingestEvent(k, { type: "move_order", orderId: a.orderId, to: a.to, by });
+      break;
+    case "pack_item":
+      ingestEvent(k, { type: "pack_item", orderId: a.orderId, menuItemId: a.menuItemId, checked: a.checked });
+      break;
+    case "dasher_update":
+      ingestEvent(k, { type: "dasher_update", orderId: a.orderId, externalId: a.externalId, dasherEtaMinutes: a.etaMinutes });
+      break;
+    case "handoff_mismatch":
+      ingestEvent(k, { type: "handoff_mismatch", orderId: a.orderId, by });
       break;
     case "task_done":
       ingestEvent(k, { type: "task_done", orderId: a.orderId, station: a.station, by });

@@ -3,6 +3,7 @@ import { Check, Loader2, Pencil, Sparkles } from "lucide-react";
 import { useState, type ComponentType, type ReactNode } from "react";
 import type { Explanation, InventoryView, OrderView, RiskLevel } from "../engine/types";
 import { minutes, RISK_HEX, RISK_LABEL, statusLabel } from "../lib/ui";
+import { startOrderDrag, useDrag } from "../lib/drag";
 import { useCan, useTwin } from "../store";
 
 export function Dot({ risk, pulse, className }: { risk: RiskLevel; pulse?: boolean; className?: string }) {
@@ -117,11 +118,15 @@ export function OrderRow({ o, compact }: { o: OrderView; compact?: boolean }) {
   const traced = useTwin((s) => s.tracedOrderId === o.id);
   const { trace, release, cancel } = useTwin.getState();
   const canHold = useCan("hold_orders");
+  const canMove = useCan("move_orders");
+  const dragging = useDrag((s) => s.order?.id === o.id);
   const held = (o.status === "held" || o.status === "deferred") && canHold;
   return (
     <div
       onClick={() => trace(traced ? null : o.id)}
-      className={clsx("cursor-pointer rounded-[8px] px-2 py-1.5 transition-colors", traced ? "bg-navy text-white" : "hover:bg-navy/[0.04]")}
+      onPointerDown={canMove && o.status !== "ready" ? (e) => startOrderDrag(e, o, (to) => void useTwin.getState().act({ type: "move_order", orderId: o.id, to })) : undefined}
+      title={canMove ? "Click to trace · drag onto a station to move it" : undefined}
+      className={clsx("cursor-pointer rounded-[8px] px-2 py-1.5 transition-colors select-none", traced ? "bg-navy text-white" : "hover:bg-navy/[0.04]", dragging && "opacity-40")}
     >
       <div className="flex items-center gap-2">
         <Dot risk={o.risk} className={traced ? "ring-2 ring-white" : undefined} />
@@ -206,5 +211,26 @@ export function PantryRow({ i }: { i: InventoryView }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** When to start a ticket so it's ready as the courier or customer arrives. */
+export function FireChip({ o }: { o: OrderView }) {
+  if (o.fireInMinutes === null || o.status === "held" || o.status === "deferred" || o.status === "blocked") return null;
+  const now = o.fireInMinutes < 0.5;
+  return (
+    <span className={clsx("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-extrabold tabular-nums", now ? "bg-navy text-white" : "bg-navy/[0.07] text-navy")}>
+      {now ? "Start now" : `Start in ${minutes(o.fireInMinutes)}`}
+    </span>
+  );
+}
+
+export function DasherChip({ o }: { o: OrderView }) {
+  if (!o.dasher) return null;
+  const eta = o.dasher.etaMinutes;
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-[#ff3008]/10 px-2 py-0.5 text-[11px] font-bold text-[#c42400]">
+      DoorDash · {o.dasher.name} {eta > 0.5 ? `in ${minutes(eta)}` : "here"}
+    </span>
   );
 }

@@ -10,7 +10,7 @@ export interface OrderItem {
 }
 
 export interface OrderEvent {
-  type: "order_received" | "rush_order" | "stock_correction" | "task_done" | "picked_up";
+  type: "order_received" | "rush_order" | "stock_correction" | "task_done" | "picked_up" | "move_order" | "pack_item" | "dasher_update" | "handoff_mismatch";
   orderId?: string;
   source?: OrderSource;
   items?: OrderItem[];
@@ -22,6 +22,15 @@ export interface OrderEvent {
   station?: StationId;
   /** Who reported the event (live mode). */
   by?: string;
+  /** For move_order: where the order should go. */
+  to?: StationId | "ready";
+  /** For pack_item. */
+  menuItemId?: string;
+  checked?: boolean;
+  /** Delivery details (DoorDash): courier name, arrival in minutes, and the external order id. */
+  dasherName?: string;
+  dasherEtaMinutes?: number;
+  externalId?: string;
 }
 
 export interface RippleNode {
@@ -91,6 +100,14 @@ export interface OrderView {
   projectedReadyInMinutes: number | null;
   blockedBy?: string;
   lateBecause?: StationId;
+  /** Minutes until this ticket should be started so it's ready right as pickup arrives. 0 = start now, null = already started. */
+  fireInMinutes: number | null;
+  /** Short code the courier or customer reads out at handoff. */
+  code: string;
+  dasher?: { name: string; etaMinutes: number };
+  /** Menu item ids already checked into the bag at Pack. */
+  packed: string[];
+  externalId?: string;
 }
 
 export interface StationView {

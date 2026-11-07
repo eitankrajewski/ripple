@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { ArrowRight, ChefHat, KeyRound, Store } from "lucide-react";
 import { useState } from "react";
-import { normalizeCode } from "../../live/backend";
+import { backend, normalizeCode } from "../../live/backend";
 import { JOINABLE_ROLES, ROLES } from "../../live/roles";
 import type { Role } from "../../live/types";
 import { useTwin } from "../../store";
@@ -115,7 +115,9 @@ export function LiveGate() {
         </form>
 
         <p className="mt-4 text-[11.5px] leading-relaxed text-faint">
-          Preview: kitchens are stored in this browser, so devices are browser tabs on this computer. Open a second tab to try joining. Connecting real phones and tablets needs a hosted backend (see docs/live-mode.md).
+          {backend.kind === "hosted"
+            ? "Connected to the cloud: phones, tablets and laptops anywhere can join with the code. Each device signs in on its own; no account needed."
+            : "Preview: kitchens are stored in this browser, so devices are browser tabs on this computer. Open a second tab to try joining. Connect Supabase to use real phones and tablets (see docs/live-mode.md)."}
         </p>
         <button className="mt-2 text-[12px] font-bold text-accent" onClick={() => setMode("sim")}>
           Back to the simulation
