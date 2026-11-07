@@ -16,7 +16,9 @@ import type { DigitalTwinState, Explanation, StrategyId } from "./engine/types";
 import { buildPayload, fallbackExplanation, requestExplanation, requestWording, scenarioExplanation, scenarioPayload } from "./lib/explain";
 
 export type Speed = 1 | 2 | 4;
-export type Tab = "plan" | "ask" | "pantry";
+export type Tab = "inspect" | "plan" | "ask";
+export type NavTab = "kitchen" | "orders" | "pantry" | "issues" | "activity";
+export type AreaId = "orders" | "pantry" | "prep" | "cook" | "pack" | "pickup";
 
 export interface ScenarioState {
   query: string;
@@ -40,6 +42,8 @@ interface Store {
   explaining: boolean;
   toast: { id: number; text: string; tone: "ok" | "warn" | "crit" } | null;
   tab: Tab;
+  nav: NavTab;
+  area: AreaId | null;
   scenario: ScenarioState;
 
   step: () => void;
@@ -56,6 +60,8 @@ interface Store {
   explainWithAI: () => Promise<void>;
   reset: () => void;
   setTab: (t: Tab) => void;
+  setNav: (t: NavTab) => void;
+  selectArea: (a: AreaId | null) => void;
   ask: (query: string) => void;
   editScenario: (spec: ScenarioSpec) => void;
   rephraseScenario: () => Promise<void>;
@@ -95,7 +101,9 @@ export const useTwin = create<Store>((set, get) => {
     previewStrategyId: null,
     explaining: false,
     toast: null,
-    tab: "plan",
+    tab: "inspect",
+    nav: "kitchen",
+    area: null,
     scenario: EMPTY_SCENARIO,
 
     step: () => {
@@ -139,7 +147,7 @@ export const useTwin = create<Store>((set, get) => {
       cancelOrder(get().kitchen, orderId);
       commit({ tracedOrderId: null });
     },
-    trace: (orderId) => set({ tracedOrderId: orderId, focusedNodeId: null }),
+    trace: (orderId) => set(orderId ? { tracedOrderId: orderId, focusedNodeId: null, tab: "inspect" } : { tracedOrderId: null }),
     focus: (nodeId) => set({ focusedNodeId: nodeId }),
     explainWithAI: async () => {
       const { state, previewStrategyId } = get();
@@ -148,9 +156,11 @@ export const useTwin = create<Store>((set, get) => {
       set({ explanation, explaining: false });
     },
     reset: () => {
-      set({ ...initial(), speed: 1, tracedOrderId: null, focusedNodeId: null, previewStrategyId: null, toast: null, tab: "plan", scenario: EMPTY_SCENARIO });
+      set({ ...initial(), speed: 1, tracedOrderId: null, focusedNodeId: null, previewStrategyId: null, toast: null, tab: "inspect", area: null, scenario: EMPTY_SCENARIO });
     },
     setTab: (tab) => set({ tab }),
+    setNav: (nav) => set({ nav }),
+    selectArea: (area) => set(area ? { area, tab: "inspect", tracedOrderId: null } : { area }),
     ask: (query) => {
       const spec = parseScenario(query);
       if (!spec) return set({ scenario: { ...EMPTY_SCENARIO, query, notUnderstood: true } });

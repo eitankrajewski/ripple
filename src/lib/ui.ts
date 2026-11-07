@@ -1,15 +1,9 @@
-import type { Metrics, OrderSource, RiskLevel } from "../engine/types";
+import type { Metrics, OrderSource, OrderView, RiskLevel } from "../engine/types";
 
 export const RISK_HEX: Record<RiskLevel, string> = {
-  normal: "#58cc02",
-  warning: "#ffab00",
-  critical: "#ff4b4b",
-};
-
-export const RISK_SOFT: Record<RiskLevel, string> = {
-  normal: "#eaf9dd",
-  warning: "#fff3d6",
-  critical: "#ffe3e3",
+  normal: "#34c759",
+  warning: "#ff9f0a",
+  critical: "#ff3b30",
 };
 
 export const RISK_LABEL: Record<RiskLevel, string> = {
@@ -18,10 +12,10 @@ export const RISK_LABEL: Record<RiskLevel, string> = {
   critical: "Critical",
 };
 
-export const SOURCE: Record<OrderSource, { label: string; color: string }> = {
-  doordash: { label: "Delivery app", color: "#ff3008" },
-  walk_in: { label: "Walk-in", color: "#1cb0f6" },
-  phone: { label: "Phone", color: "#a970ff" },
+export const SOURCE: Record<OrderSource, { label: string }> = {
+  doordash: { label: "Delivery app" },
+  walk_in: { label: "Walk-in" },
+  phone: { label: "Phone" },
 };
 
 export const pct = (n: number) => `${Math.round(n * 100)}%`;
@@ -34,3 +28,15 @@ export const minutes = (n: number) => {
 export const riskFromUtil = (u: number): RiskLevel => (u > 1 ? "critical" : u >= 0.85 ? "warning" : "normal");
 
 export const score = (m: Metrics) => m.projectedLateOrders * 1000 + m.ordersAtRisk * 100 + m.maxStationUtilization * 10 + m.repeatedPrepActions / 100;
+
+const STATUS: Record<OrderView["status"], string> = {
+  queued: "Waiting",
+  prepping: "In prep",
+  cooking: "Cooking",
+  packing: "Packing",
+  ready: "Ready",
+  held: "Held",
+  deferred: "Deferred",
+  blocked: "Blocked",
+};
+export const statusLabel = (o: OrderView) => STATUS[o.status];

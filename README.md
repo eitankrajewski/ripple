@@ -10,11 +10,12 @@ All outcomes are **simulated projections**. The order feed is simulated; there i
 
 ## What's in the demo
 
-- **Kitchen floor**: an illustrated line (Orders in → Pantry → Prep → Cook → Pack → Pickup) with live load bars, order chips and animated flow. Stations glow and pulse where the ripple hits. Tap any order to trace what is slowing it down.
+- **3D kitchen** (centerpiece): a simple, light Three.js model of the kitchen (Orders in → Pantry → Prep → Cook → Pack → Pickup) built with React Three Fiber. Drag to orbit, scroll or pinch to zoom, and click a station (or its label) to fly to it and open its status in the Inspector. Rings appear only where something is wrong; tracing an order highlights its path. Needs WebGL; without it the navigator and inspector still work.
+- **Xcode-style layout**: slim toolbar (reset, play/pause, status, speed, rush), a left navigator (Kitchen tree, Orders, Pantry, Issues, Activity) and a right inspector (Inspector, Plan, Ask AI). Both side panels can be hidden from the toolbar.
 - **Seeded scenario**: five healthy orders, background orders every 5–8 s, and a guaranteed heavy chicken rush at ~40 s that causes a chicken shortage, Prep above 100% and several late orders.
-- **Plan**: *Protect Pickup Times*, *Reduce Kitchen Overload* and *Minimize Waste*, each with deterministic metrics vs. "no change" and a trade-off. Selecting one previews it on the kitchen floor; nothing is applied until you approve.
+- **Plan**: *Protect Pickup Times*, *Reduce Kitchen Overload* and *Minimize Waste*, each with deterministic metrics vs. "no change" and a trade-off. Selecting one previews it in the 3D kitchen; nothing is applied until you approve.
 - **Ask AI (what-ifs)**: type a question such as "What should we do if 20 customers suddenly walk in?" or "A cook calls out sick". A keyword parser turns it into a scenario you can adjust, the twin plays it out on a copy of the kitchen and ranks responses (strategies, adding staff, emergency restock). You can then play it on the live twin.
-- **Incoming orders**: ticket cards with filters (All / At risk / Held), release or cancel held orders, plus an activity log.
+- **Orders**: list with filters (All / At risk / Held), release or cancel held orders, plus an activity log and an Issues list.
 - **Pantry**: on hand vs. needed, tap a number to recount stock.
 - **Controls**: play / pause, 1×/2×/4× speed, *Rush order*, and *Reset* to the exact initial seed.
 - **AI wording**: optional Gemini rephrasing of the deterministic explanations. Gemini never calculates anything; without a key the deterministic text is used.
@@ -36,7 +37,8 @@ Optional AI wording: create `.env.local` with `GEMINI_API_KEY=...` (never commit
 
 ```
 src/engine/      seed data, simulation (ingestEvent, tick, project), strategies, what-if scenarios, tests
-src/components/  Kitchen floor, orders, Plan / Ask AI / Pantry side panel, illustrations
+src/components/  Kitchen3D (Three.js scene), Toolbar, Navigator, Inspector, Plan / Ask AI tabs, shared kit
+src/lib/areas.ts  derives per-area status shared by the 3D scene and the inspector
 src/store.ts  zustand store wiring the engine to the UI
 api/explain.ts   Vercel serverless function for optional Gemini wording
 server/       dev-server middleware that mirrors /api/explain locally
